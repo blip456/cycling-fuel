@@ -42,6 +42,7 @@ const DialogContent = React.forwardRef<
         "duration-300",
         className
       )}
+      onOpenAutoFocus={(e) => e.preventDefault()}
       {...props}
     >
       <div className="flex justify-center pt-3 pb-1">
