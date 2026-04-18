@@ -51,35 +51,51 @@ function NumberStepper({
   max?: number;
   onChange: (v: number) => void;
 }) {
+  const [inputStr, setInputStr] = useState(String(value));
+
+  function step(delta: number) {
+    const base = parseInt(inputStr);
+    const next = Math.min(max, Math.max(min, (isNaN(base) ? value : base) + delta));
+    setInputStr(String(next));
+    onChange(next);
+  }
+
   return (
     <div>
       <Label className="mb-2 block">{label}</Label>
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => onChange(Math.max(min, value - 1))}
-          className="w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center text-foreground hover:bg-border transition-colors"
+          onClick={() => step(-1)}
+          className="w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center text-foreground hover:bg-border transition-colors shrink-0"
         >
           <Minus className="h-3.5 w-3.5" />
         </button>
-        <div className="flex-1 relative">
+        <div className="flex-1 relative min-w-0">
           <Input
-            type="number"
-            value={value}
-            min={min}
-            max={max}
+            type="text"
+            inputMode="numeric"
+            value={inputStr}
             onChange={(e) => {
-              const v = parseInt(e.target.value);
+              const raw = e.target.value.replace(/[^0-9]/g, "");
+              setInputStr(raw);
+              const v = parseInt(raw);
               if (!isNaN(v)) onChange(Math.min(max, Math.max(min, v)));
             }}
-            className="text-center pr-10"
+            onBlur={() => {
+              const v = parseInt(inputStr);
+              const clamped = isNaN(v) ? min : Math.min(max, Math.max(min, v));
+              setInputStr(String(clamped));
+              onChange(clamped);
+            }}
+            className="text-center pr-9"
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{unit}</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">{unit}</span>
         </div>
         <button
           type="button"
-          onClick={() => onChange(Math.min(max, value + 1))}
-          className="w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center text-foreground hover:bg-border transition-colors"
+          onClick={() => step(1)}
+          className="w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center text-foreground hover:bg-border transition-colors shrink-0"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -154,24 +170,22 @@ function DrinkModal({
             onChange={(v) => f("scoopsRecommended", v)}
           />
 
-          <div className="grid grid-cols-2 gap-3">
-            <NumberStepper
-              label="Water per serving"
-              value={form.mlPerServing}
-              unit="ml"
-              min={100}
-              max={2000}
-              onChange={(v) => f("mlPerServing", v)}
-            />
-            <NumberStepper
-              label="Carbs per serving"
-              value={form.carbsPerServing}
-              unit="g"
-              min={1}
-              max={200}
-              onChange={(v) => f("carbsPerServing", v)}
-            />
-          </div>
+          <NumberStepper
+            label="Water per serving"
+            value={form.mlPerServing}
+            unit="ml"
+            min={100}
+            max={2000}
+            onChange={(v) => f("mlPerServing", v)}
+          />
+          <NumberStepper
+            label="Carbs per serving"
+            value={form.carbsPerServing}
+            unit="g"
+            min={1}
+            max={200}
+            onChange={(v) => f("carbsPerServing", v)}
+          />
 
           <div>
             <Label className="mb-2 block">Carb Ratio</Label>
