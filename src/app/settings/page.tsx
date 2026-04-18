@@ -33,6 +33,7 @@ const EMPTY_DRINK: Omit<DrinkProduct, "id"> = {
 const EMPTY_FOOD: Omit<FoodItem, "id"> = {
   name: "",
   brand: "",
+  flavour: "",
   carbsPerServing: 25,
 };
 
@@ -270,6 +271,15 @@ function FoodModal({
             </div>
           </div>
 
+          <div>
+            <Label className="mb-2 block">Flavour (optional)</Label>
+            <Input
+              placeholder="Chocolate, Vanilla, …"
+              value={form.flavour ?? ""}
+              onChange={(e) => f("flavour", e.target.value)}
+            />
+          </div>
+
           <NumberStepper
             label="Carbs per serving"
             value={form.carbsPerServing}
@@ -444,7 +454,11 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-foreground text-sm">{food.name}</p>
-                  {food.brand && <p className="text-xs text-muted-foreground">{food.brand}</p>}
+                  {(food.brand || food.flavour) && (
+                    <p className="text-xs text-muted-foreground">
+                      {food.brand}{food.brand && food.flavour ? ` · ${food.flavour}` : food.flavour}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-sm font-bold text-primary">{food.carbsPerServing}g</span>

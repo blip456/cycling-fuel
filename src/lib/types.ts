@@ -15,6 +15,7 @@ export interface FoodItem {
   id: string;
   name: string;
   brand?: string;
+  flavour?: string;
   carbsPerServing: number;
 }
 
