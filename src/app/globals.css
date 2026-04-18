@@ -1,0 +1,98 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --background: #FAFAF7;
+  --foreground: #1C2526;
+  --card: #FFFFFF;
+  --card-foreground: #1C2526;
+  --primary: #6B9E7B;
+  --primary-foreground: #FFFFFF;
+  --secondary: #EDF3EF;
+  --secondary-foreground: #1C2526;
+  --muted: #F2F4F2;
+  --muted-foreground: #8A9BA8;
+  --accent: #F08060;
+  --accent-foreground: #FFFFFF;
+  --destructive: #E05A5A;
+  --destructive-foreground: #FFFFFF;
+  --border: #E2E8E4;
+  --input: #E2E8E4;
+  --ring: #6B9E7B;
+  --radius: 0.75rem;
+  --sage: #6B9E7B;
+  --peach: #F08060;
+  --sage-light: #EDF3EF;
+  --peach-light: #FEF0EB;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sage: var(--sage);
+  --color-peach: var(--peach);
+  --color-sage-light: var(--sage-light);
+  --color-peach-light: var(--peach-light);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border);
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* iOS safe area support */
+.safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+}
+
+.pb-nav {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
+}
+
+/* Smooth scrolling */
+.scroll-smooth {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Remove default tap highlight on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure minimum tap target sizes */
+button, a, [role="button"] {
+  min-height: 44px;
+}
