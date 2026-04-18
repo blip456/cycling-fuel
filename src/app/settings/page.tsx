@@ -462,6 +462,7 @@ export default function SettingsPage() {
 
       {/* Drink Modal */}
       <DrinkModal
+        key={drinkModal.drink?.id ?? "new-drink"}
         open={drinkModal.open}
         initial={drinkModal.drink}
         onClose={() => setDrinkModal({ open: false })}
@@ -477,6 +478,7 @@ export default function SettingsPage() {
 
       {/* Food Modal */}
       <FoodModal
+        key={foodModal.food?.id ?? "new-food"}
         open={foodModal.open}
         initial={foodModal.food}
         onClose={() => setFoodModal({ open: false })}
