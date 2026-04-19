@@ -14,6 +14,9 @@ const navItems = [
 export function BottomNav() {
   const pathname = usePathname();
 
+  // Plan wizard and result pages have their own fixed footers
+  if (pathname.startsWith("/plan/")) return null;
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border safe-bottom">
       <div className="flex items-center justify-around px-2 pt-2 pb-1 max-w-lg mx-auto">
