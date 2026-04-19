@@ -216,7 +216,9 @@ export default function PlanResultPage() {
     result.schedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
   const displayTotalCarbs = editMode ? liveTotalCarbs : viewTotalCarbs;
   const fluidPerHour = Math.round(result.totalFluidMl / result.durationHours);
-  const totalFluidL = (result.totalFluidMl / 1000).toFixed(1);
+  const targetFluidMl = result.totalFluidMl;
+  const actualFluidMl = result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
+  const fluidDiffMl = actualFluidMl - targetFluidMl;
   // Target is always duration × carbs/hr — stable even after edits
   const targetCarbs = Math.round(result.durationHours * plan.carbsPerHour);
   const carbsDiff = displayTotalCarbs - targetCarbs;
@@ -325,18 +327,24 @@ export default function PlanResultPage() {
                 {carbsDiff === 0
                   ? `target ${targetCarbs}g ✓`
                   : carbsDiff > 0
-                  ? `target ${targetCarbs}g (+${carbsDiff})`
-                  : `target ${targetCarbs}g (${carbsDiff})`}
+                  ? `target ${targetCarbs}g (+${carbsDiff}g)`
+                  : `target ${targetCarbs}g (${carbsDiff}g)`}
               </p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-primary-foreground/70 mb-0.5">
                 <Droplets className="h-3.5 w-3.5" />
-                <span className="text-xs">Water/hr</span>
+                <span className="text-xs">Total water</span>
               </div>
-              <p className="font-bold">{fluidPerHour}ml</p>
-              <p className="text-[10px] mt-0.5 font-medium text-primary-foreground/50">
-                ~{totalFluidL}L total
+              <p className="font-bold">{(actualFluidMl / 1000).toFixed(1)}L</p>
+              <p className={`text-[10px] mt-0.5 font-medium ${
+                fluidDiffMl < -250 ? "text-amber-300" : "text-primary-foreground/50"
+              }`}>
+                {fluidDiffMl === 0
+                  ? `target ${(targetFluidMl / 1000).toFixed(1)}L ✓`
+                  : fluidDiffMl > 0
+                  ? `target ${(targetFluidMl / 1000).toFixed(1)}L (+${fluidDiffMl}ml)`
+                  : `target ${(targetFluidMl / 1000).toFixed(1)}L (${fluidDiffMl}ml)`}
               </p>
             </div>
           </div>
