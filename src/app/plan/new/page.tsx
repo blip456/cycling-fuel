@@ -404,12 +404,13 @@ export default function NewPlanPage() {
                 role="switch"
                 aria-checked={data.includeSolidFood}
                 onClick={() => update("includeSolidFood", !data.includeSolidFood)}
-                className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
+                className={`relative inline-flex h-[31px] w-[51px] shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
                   data.includeSolidFood ? "bg-primary" : "bg-muted"
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-[27px] w-[27px] rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ${
                     data.includeSolidFood ? "translate-x-5" : "translate-x-0"
                   }`}
                 />
