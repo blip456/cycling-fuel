@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { useStore } from "@/lib/store";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { geocodeLocation, fetchWeather } from "@/lib/weather";
@@ -401,10 +400,22 @@ export default function NewPlanPage() {
                 <p className="text-sm font-medium text-foreground">Include Solid Food?</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Bars, gels, bananas, etc.</p>
               </div>
-              <Switch
-                checked={data.includeSolidFood}
-                onCheckedChange={(v) => update("includeSolidFood", v)}
-              />
+              <div className="flex rounded-xl overflow-hidden border border-border">
+                {([true, false] as const).map((val) => (
+                  <button
+                    key={String(val)}
+                    type="button"
+                    onClick={() => update("includeSolidFood", val)}
+                    className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                      data.includeSolidFood === val
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-card text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {val ? "Yes" : "No"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
