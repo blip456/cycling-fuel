@@ -121,10 +121,11 @@ export default function PlanResultPage() {
     });
   }, [editItems, liveBottles]);
 
-  const liveTotalCarbs =
-    liveSchedule.length > 0
-      ? liveSchedule[liveSchedule.length - 1].cumulativeCarbs
-      : (plan?.result?.totalCarbs ?? 0);
+  const liveTotalCarbs = useMemo(() => {
+    const bottleCarbs = liveBottles.reduce((sum, b) => sum + b.carbsTotal, 0);
+    const foodCarbs = liveSchedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
+    return bottleCarbs + foodCarbs;
+  }, [liveBottles, liveSchedule]);
 
   function enterEditMode() {
     if (!plan?.result) return;
@@ -210,8 +211,12 @@ export default function PlanResultPage() {
   const weatherMeta = plan.weather ? getWeatherLabel(plan.weather.tempC) : null;
   const displayBottles = editMode ? liveBottles : result.bottlePrep;
   const displaySchedule = editMode ? liveSchedule : result.schedule;
-  const displayTotalCarbs = editMode ? liveTotalCarbs : result.totalCarbs;
-  const inBottlesMl = result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
+  const viewTotalCarbs =
+    result.bottlePrep.reduce((sum, b) => sum + b.carbsTotal, 0) +
+    result.schedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
+  const displayTotalCarbs = editMode ? liveTotalCarbs : viewTotalCarbs;
+  const fluidPerHour = Math.round(result.totalFluidMl / result.durationHours);
+  const totalFluidL = (result.totalFluidMl / 1000).toFixed(1);
   // Target is always duration × carbs/hr — stable even after edits
   const targetCarbs = Math.round(result.durationHours * plan.carbsPerHour);
   const carbsDiff = displayTotalCarbs - targetCarbs;
@@ -327,9 +332,12 @@ export default function PlanResultPage() {
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-primary-foreground/70 mb-0.5">
                 <Droplets className="h-3.5 w-3.5" />
-                <span className="text-xs">In bottles</span>
+                <span className="text-xs">Water/hr</span>
               </div>
-              <p className="font-bold">{Math.round(inBottlesMl / 100) / 10}L</p>
+              <p className="font-bold">{fluidPerHour}ml</p>
+              <p className="text-[10px] mt-0.5 font-medium text-primary-foreground/50">
+                ~{totalFluidL}L total
+              </p>
             </div>
           </div>
         </div>

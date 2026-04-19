@@ -258,9 +258,10 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     preRideNote = `Pre-ride (3–4hrs before): eat ~${carbLoadG}g carbs (~${carbLoadG}g based on your weight). Think oats, rice, banana, toast.`;
   }
 
-  // Use actual distributed carbs (last cumulativeCarbs), not the theoretical target
+  // Bottle carbs + food carbs = exact total without per-sip rounding errors
   const actualCarbs =
-    schedule.length > 0 ? schedule[schedule.length - 1].cumulativeCarbs : totalCarbs;
+    bottlePrep.reduce((sum, b) => sum + b.carbsTotal, 0) +
+    schedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
 
   return {
     durationHours,
