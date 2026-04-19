@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, Sun, Cloud, CloudRain, CloudLightning,
   Snowflake, Wind, Droplets, Flame, AlertTriangle, Bike, Coffee,
-  Edit2
+  Pencil, X, Plus, Check,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration, formatTime } from "@/lib/utils";
-import type { FuelPlan, WeatherData } from "@/lib/types";
+import type { FuelPlan, ScheduleItem, WeatherData } from "@/lib/types";
 
 function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className?: string }) {
   const cls = className ?? "h-5 w-5";
@@ -31,17 +31,82 @@ function getWeatherLabel(tempC: number) {
   return { label: "Hot — stay hydrated!", color: "text-orange-500" };
 }
 
+// Local edit state: food can be null = explicitly cleared
+type EditItem = {
+  timeMin: number;
+  km: number;
+  drink?: ScheduleItem["drink"];
+  food?: { name: string; carbs: number } | null;
+  note?: string;
+};
+
 export default function PlanResultPage() {
   const params = useParams();
   const router = useRouter();
-  const { getPlan } = useStore();
+  const { getPlan, savePlan, foods } = useStore();
   const [plan, setPlan] = useState<FuelPlan | null>(null);
+
+  const [editMode, setEditMode] = useState(false);
+  const [editItems, setEditItems] = useState<EditItem[]>([]);
+  const [openPickerIdx, setOpenPickerIdx] = useState<number | null>(null);
 
   useEffect(() => {
     const found = getPlan(params.id as string);
     if (found) setPlan(found);
     else router.replace("/");
   }, [params.id, getPlan, router]);
+
+  // Live carb recalculation as user edits
+  const liveSchedule = useMemo(() => {
+    let cum = 0;
+    return editItems.map((item) => {
+      cum += (item.drink?.carbs ?? 0) + (item.food?.carbs ?? 0);
+      return { ...item, cumulativeCarbs: cum, food: item.food ?? undefined };
+    });
+  }, [editItems]);
+
+  const liveTotalCarbs =
+    liveSchedule.length > 0
+      ? liveSchedule[liveSchedule.length - 1].cumulativeCarbs
+      : (plan?.result?.totalCarbs ?? 0);
+
+  function enterEditMode() {
+    if (!plan?.result) return;
+    setEditItems(plan.result.schedule.map((s) => ({ ...s })));
+    setEditMode(true);
+    setOpenPickerIdx(null);
+  }
+
+  function cancelEdit() {
+    setEditMode(false);
+    setOpenPickerIdx(null);
+  }
+
+  function removeFood(idx: number) {
+    setEditItems((prev) => prev.map((item, i) => (i === idx ? { ...item, food: null } : item)));
+    setOpenPickerIdx(null);
+  }
+
+  function setFood(idx: number, food: { name: string; carbs: number }) {
+    setEditItems((prev) => prev.map((item, i) => (i === idx ? { ...item, food } : item)));
+    setOpenPickerIdx(null);
+  }
+
+  function saveChanges() {
+    if (!plan || !plan.result) return;
+    const updatedPlan: FuelPlan = {
+      ...plan,
+      result: {
+        ...plan.result,
+        schedule: liveSchedule,
+        totalCarbs: liveTotalCarbs,
+      },
+    };
+    savePlan(updatedPlan);
+    setPlan(updatedPlan);
+    setEditMode(false);
+    setOpenPickerIdx(null);
+  }
 
   if (!plan || !plan.result) {
     return (
@@ -56,36 +121,60 @@ export default function PlanResultPage() {
 
   const { result } = plan;
   const weatherMeta = plan.weather ? getWeatherLabel(plan.weather.tempC) : null;
+  const displaySchedule = editMode ? liveSchedule : result.schedule;
+  const displayTotalCarbs = editMode ? liveTotalCarbs : result.totalCarbs;
 
   return (
     <div className="min-h-dvh bg-background pb-nav">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 p-2 -ml-2 rounded-xl hover:bg-muted transition-colors text-sm font-medium text-muted-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </button>
-          <h1 className="font-semibold text-foreground text-sm">Your Fuel Plan</h1>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push(`/plan/new?edit=${plan.id}`)}
-              className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground"
-              title="Edit plan"
-            >
-              <Edit2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => window.open(`/plan/${plan.id}/minimal`, "_blank")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Print
-            </button>
-          </div>
+          {editMode ? (
+            <>
+              <button
+                onClick={cancelEdit}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+                Cancel
+              </button>
+              <span className="text-xs font-medium text-muted-foreground">Editing schedule</span>
+              <button
+                onClick={saveChanges}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Save
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => router.back()}
+                className="flex items-center gap-2 p-2 -ml-2 rounded-xl hover:bg-muted transition-colors text-sm font-medium text-muted-foreground"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+              <h1 className="font-semibold text-foreground text-sm">Your Fuel Plan</h1>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={enterEditMode}
+                  className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground"
+                  title="Edit schedule"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => window.open(`/plan/${plan.id}/minimal`, "_blank")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Print
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -132,7 +221,7 @@ export default function PlanResultPage() {
                 <Bike className="h-3.5 w-3.5" />
                 <span className="text-xs">Total carbs</span>
               </div>
-              <p className="font-bold">{result.totalCarbs}g</p>
+              <p className="font-bold transition-all duration-150">{displayTotalCarbs}g</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-primary-foreground/70 mb-0.5">
@@ -206,54 +295,144 @@ export default function PlanResultPage() {
 
         {/* Schedule */}
         <section>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-            On the Bike
-          </h2>
-          <div className="bg-card border border-border rounded-2xl overflow-hidden">
-            {result.schedule.map((item, i) => (
-              <div
-                key={i}
-                className={`flex items-start gap-3 px-4 py-3.5 ${
-                  i < result.schedule.length - 1 ? "border-b border-border" : ""
-                }`}
-              >
-                <div className="shrink-0 w-20 text-right">
-                  <p className="text-xs font-semibold text-foreground">{formatTime(item.timeMin)}</p>
-                  <p className="text-xs text-muted-foreground">km {item.km}</p>
-                </div>
-                <div className="w-px bg-border self-stretch" />
-                <div className="flex-1 min-w-0">
-                  {item.note && (
-                    <p className="text-sm text-muted-foreground">{item.note}</p>
-                  )}
-                  {item.drink && (
-                    <div className="flex items-center gap-1.5">
-                      <Droplets className="h-3.5 w-3.5 text-primary shrink-0" />
-                      <p className="text-sm text-foreground">
-                        <span className="font-medium">B{item.drink.bottleIndex}</span>{" "}
-                        {item.drink.drinkName} — {item.drink.mlAmount}ml
-                        {item.drink.carbs > 0 && (
-                          <span className="text-muted-foreground"> ({item.drink.carbs}g)</span>
-                        )}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              On the Bike
+            </h2>
+            {editMode && (
+              <span className="text-xs text-primary font-medium bg-sage-light px-2 py-1 rounded-lg">
+                Tap rows to edit food
+              </span>
+            )}
+          </div>
+
+          <div className={`bg-card border rounded-2xl overflow-hidden ${editMode ? "border-primary/40" : "border-border"}`}>
+            {displaySchedule.map((item, i) => {
+              const isLast = i === displaySchedule.length - 1;
+              const pickerOpen = editMode && openPickerIdx === i;
+
+              return (
+                <div key={i} className={!isLast ? "border-b border-border" : ""}>
+                  <div className="flex items-start gap-3 px-4 py-3.5">
+                    {/* Time / km */}
+                    <div className="shrink-0 w-16 text-right">
+                      <p className="text-xs font-semibold text-foreground">{formatTime(item.timeMin)}</p>
+                      <p className="text-xs text-muted-foreground">km {item.km}</p>
+                    </div>
+
+                    <div className="w-px bg-border self-stretch" />
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      {item.note && (
+                        <p className="text-sm text-muted-foreground">{item.note}</p>
+                      )}
+                      {item.drink && (
+                        <div className="flex items-center gap-1.5">
+                          <Droplets className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <p className="text-sm text-foreground">
+                            <span className="font-medium">B{item.drink.bottleIndex}</span>{" "}
+                            {item.drink.drinkName} — {item.drink.mlAmount}ml
+                            {item.drink.carbs > 0 && (
+                              <span className="text-muted-foreground"> ({item.drink.carbs}g)</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Food — view mode */}
+                      {!editMode && item.food && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <Bike className="h-3.5 w-3.5 text-accent shrink-0" />
+                          <p className="text-sm text-foreground">
+                            {item.food.name}{" "}
+                            <span className="text-muted-foreground">({item.food.carbs}g)</span>
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Food — edit mode */}
+                      {editMode && (
+                        <div className="mt-1">
+                          {item.food ? (
+                            <div className="flex items-center gap-2">
+                              <Bike className="h-3.5 w-3.5 text-accent shrink-0" />
+                              <span className="text-sm text-foreground flex-1">
+                                {item.food.name}{" "}
+                                <span className="text-muted-foreground">({item.food.carbs}g)</span>
+                              </span>
+                              <button
+                                onClick={() => setOpenPickerIdx(pickerOpen ? null : i)}
+                                className="text-xs text-primary underline"
+                              >
+                                change
+                              </button>
+                              <button
+                                onClick={() => removeFood(i)}
+                                className="p-1 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setOpenPickerIdx(pickerOpen ? null : i)}
+                              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors py-0.5"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Add food
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Cumulative carbs */}
+                    <div className="shrink-0 text-right">
+                      <p className="text-xs font-semibold text-primary">{item.cumulativeCarbs}g</p>
+                      <p className="text-xs text-muted-foreground">total</p>
+                    </div>
+                  </div>
+
+                  {/* Food picker */}
+                  {pickerOpen && (
+                    <div className="px-4 pb-3 pt-0 border-t border-dashed border-border bg-muted/30">
+                      <p className="text-xs text-muted-foreground font-medium mb-2 pt-2.5">
+                        Select food:
                       </p>
+                      {foods.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No foods in your list.{" "}
+                          <button
+                            onClick={() => router.push("/settings")}
+                            className="text-primary underline"
+                          >
+                            Add in Settings
+                          </button>
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {foods.map((food) => (
+                            <button
+                              key={food.id}
+                              onClick={() => setFood(i, { name: food.name, carbs: food.carbsPerServing })}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all duration-150 ${
+                                item.food?.name === food.name
+                                  ? "bg-primary text-white border-primary"
+                                  : "bg-card text-foreground border-border hover:border-primary/50"
+                              }`}
+                            >
+                              {food.name}
+                              <span className="ml-1 opacity-70">{food.carbsPerServing}g</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {item.food && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Bike className="h-3.5 w-3.5 text-accent shrink-0" />
-                      <p className="text-sm text-foreground">
-                        {item.food.name}{" "}
-                        <span className="text-muted-foreground">({item.food.carbs}g)</span>
-                      </p>
-                    </div>
-                  )}
                 </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-xs font-semibold text-primary">{item.cumulativeCarbs}g</p>
-                  <p className="text-xs text-muted-foreground">total</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
