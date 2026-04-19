@@ -80,8 +80,8 @@ export default function NewPlanPage() {
     try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch { /* ignore */ }
   }, [data]);
 
-  const distanceNum = parseFloat(data.distance) || 0;
-  const speedNum = parseFloat(data.avgSpeed) || 0;
+  const distanceNum = parseFloat(data.distance.replace(",", ".")) || 0;
+  const speedNum = parseFloat(data.avgSpeed.replace(",", ".")) || 0;
   const duration = speedNum > 0 ? distanceNum / speedNum : 0;
 
   function update<K extends keyof WizardData>(key: K, value: WizardData[K]) {
@@ -245,11 +245,14 @@ export default function NewPlanPage() {
                 <div className="relative">
                   <Input
                     id="distance"
-                    type="number"
+                    type="text"
                     inputMode="decimal"
                     placeholder="80"
                     value={data.distance}
-                    onChange={(e) => update("distance", e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (/^[0-9]*[.,]?[0-9]*$/.test(v)) update("distance", v);
+                    }}
                     className="pr-10"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">km</span>
@@ -260,11 +263,14 @@ export default function NewPlanPage() {
                 <div className="relative">
                   <Input
                     id="speed"
-                    type="number"
+                    type="text"
                     inputMode="decimal"
                     placeholder="28"
                     value={data.avgSpeed}
-                    onChange={(e) => update("avgSpeed", e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (/^[0-9]*[.,]?[0-9]*$/.test(v)) update("avgSpeed", v);
+                    }}
                     className="pr-14"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">km/h</span>
