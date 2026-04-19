@@ -42,6 +42,15 @@ interface AppStore {
   savePlan: (plan: FuelPlan) => void;
   deletePlan: (id: string) => void;
   getPlan: (id: string) => FuelPlan | undefined;
+
+  importData: (payload: {
+    profile?: UserProfile;
+    drinks?: DrinkProduct[];
+    foods?: FoodItem[];
+    plans?: FuelPlan[];
+    modes: { drinks: "merge" | "replace"; foods: "merge" | "replace"; plans: "merge" | "replace" };
+  }) => void;
+  clearAll: () => void;
 }
 
 export const useStore = create<AppStore>()(
@@ -89,6 +98,24 @@ export const useStore = create<AppStore>()(
       deletePlan: (id) =>
         set((s) => ({ plans: s.plans.filter((p) => p.id !== id) })),
       getPlan: (id) => get().plans.find((p) => p.id === id),
+
+      importData: ({ profile, drinks, foods, plans, modes }) =>
+        set((s) => {
+          function merge<T extends { id: string }>(existing: T[], incoming: T[], mode: "merge" | "replace"): T[] {
+            if (mode === "replace") return incoming;
+            const ids = new Set(existing.map((x) => x.id));
+            return [...existing, ...incoming.filter((x) => !ids.has(x.id))];
+          }
+          return {
+            ...(profile ? { profile } : {}),
+            ...(drinks ? { drinks: merge(s.drinks, drinks, modes.drinks) } : {}),
+            ...(foods ? { foods: merge(s.foods, foods, modes.foods) } : {}),
+            ...(plans ? { plans: merge(s.plans, plans, modes.plans) } : {}),
+          };
+        }),
+
+      clearAll: () =>
+        set({ profile: { defaultCarbsPerHour: 90, defaultBottleMl: 500 }, drinks: DEFAULT_DRINKS, foods: DEFAULT_FOODS, plans: [] }),
     }),
     {
       name: "cycling-fuel-store",

@@ -1,18 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Minus, Pencil, Trash2, Check } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, Minus, Pencil, Trash2, Check, Download, Upload, AlertTriangle } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import type { DrinkProduct, FoodItem, CarbRatio } from "@/lib/types";
+import type { DrinkProduct, FoodItem, FuelPlan, UserProfile, CarbRatio } from "@/lib/types";
 
 const CARB_RATIO_LABELS: Record<CarbRatio, string> = {
   "single": "Single source (glucose only)",
@@ -303,14 +303,237 @@ function FoodModal({
   );
 }
 
+type ImportMode = "merge" | "replace";
+
+interface ImportPayload {
+  profile?: UserProfile;
+  drinks?: DrinkProduct[];
+  foods?: FoodItem[];
+  plans?: FuelPlan[];
+}
+
+function ImportModal({
+  open,
+  payload,
+  onClose,
+  onImport,
+}: {
+  open: boolean;
+  payload: ImportPayload;
+  onClose: () => void;
+  onImport: (
+    selected: { profile: boolean; drinks: boolean; foods: boolean; plans: boolean },
+    modes: { drinks: ImportMode; foods: ImportMode; plans: ImportMode }
+  ) => void;
+}) {
+  const [sel, setSel] = useState({ profile: true, drinks: true, foods: true, plans: true });
+  const [modes, setModes] = useState<{ drinks: ImportMode; foods: ImportMode; plans: ImportMode }>({
+    drinks: "merge",
+    foods: "merge",
+    plans: "merge",
+  });
+
+  const hasProfile = !!payload.profile;
+  const drinkCount = payload.drinks?.length ?? 0;
+  const foodCount = payload.foods?.length ?? 0;
+  const planCount = payload.plans?.length ?? 0;
+
+  const nothingSelected = !sel.profile && !sel.drinks && !sel.foods && !sel.plans;
+
+  function toggle(k: keyof typeof sel) {
+    setSel((p) => ({ ...p, [k]: !p[k] }));
+  }
+
+  function setMode(k: keyof typeof modes, v: ImportMode) {
+    setModes((p) => ({ ...p, [k]: v }));
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Import Data</DialogTitle>
+        </DialogHeader>
+        <div className="px-5 pb-6 flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">Choose what to import and how to handle conflicts.</p>
+
+          <div className="flex flex-col gap-3">
+            {/* Profile */}
+            {hasProfile && (
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sel.profile}
+                  onChange={() => toggle("profile")}
+                  className="w-4 h-4 accent-primary"
+                />
+                <span className="text-sm font-medium flex-1">Profile &amp; defaults</span>
+              </label>
+            )}
+
+            {/* Drinks */}
+            {drinkCount > 0 && (
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sel.drinks}
+                    onChange={() => toggle("drinks")}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm font-medium flex-1">Drinks <span className="text-muted-foreground font-normal">({drinkCount} items)</span></span>
+                </label>
+                {sel.drinks && (
+                  <div className="ml-7 flex gap-3">
+                    {(["merge", "replace"] as ImportMode[]).map((m) => (
+                      <label key={m} className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground">
+                        <input
+                          type="radio"
+                          checked={modes.drinks === m}
+                          onChange={() => setMode("drinks", m)}
+                          className="accent-primary"
+                        />
+                        {m === "merge" ? "Add new only" : "Replace all"}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Foods */}
+            {foodCount > 0 && (
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sel.foods}
+                    onChange={() => toggle("foods")}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm font-medium flex-1">Foods <span className="text-muted-foreground font-normal">({foodCount} items)</span></span>
+                </label>
+                {sel.foods && (
+                  <div className="ml-7 flex gap-3">
+                    {(["merge", "replace"] as ImportMode[]).map((m) => (
+                      <label key={m} className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground">
+                        <input
+                          type="radio"
+                          checked={modes.foods === m}
+                          onChange={() => setMode("foods", m)}
+                          className="accent-primary"
+                        />
+                        {m === "merge" ? "Add new only" : "Replace all"}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Plans */}
+            {planCount > 0 && (
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sel.plans}
+                    onChange={() => toggle("plans")}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm font-medium flex-1">Ride plans <span className="text-muted-foreground font-normal">({planCount} items)</span></span>
+                </label>
+                {sel.plans && (
+                  <div className="ml-7 flex gap-3">
+                    {(["merge", "replace"] as ImportMode[]).map((m) => (
+                      <label key={m} className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground">
+                        <input
+                          type="radio"
+                          checked={modes.plans === m}
+                          onChange={() => setMode("plans", m)}
+                          className="accent-primary"
+                        />
+                        {m === "merge" ? "Add new only" : "Replace all"}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Button
+            className="w-full mt-1"
+            disabled={nothingSelected}
+            onClick={() => onImport(sel, modes)}
+          >
+            <Check className="h-4 w-4 mr-1.5" />
+            Import Selected
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const CARB_HOUR_OPTIONS = [45, 60, 90, 120] as const;
 const BOTTLE_SIZE_OPTIONS = [500, 750, 1000] as const;
 
 export default function SettingsPage() {
-  const { profile, drinks, foods, updateProfile, addDrink, updateDrink, deleteDrink, addFood, updateFood, deleteFood } = useStore();
+  const {
+    profile, drinks, foods, plans,
+    updateProfile, addDrink, updateDrink, deleteDrink,
+    addFood, updateFood, deleteFood,
+    importData, clearAll,
+  } = useStore();
 
   const [drinkModal, setDrinkModal] = useState<{ open: boolean; drink?: DrinkProduct }>({ open: false });
   const [foodModal, setFoodModal] = useState<{ open: boolean; food?: FoodItem }>({ open: false });
+  const [importModal, setImportModal] = useState<{ open: boolean; payload: ImportPayload }>({ open: false, payload: {} });
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleExport() {
+    const data = JSON.stringify({ profile, drinks, foods, plans }, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cyclefuel-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string) as ImportPayload;
+        if (typeof parsed !== "object" || parsed === null) throw new Error();
+        setImportModal({ open: true, payload: parsed });
+      } catch {
+        alert("Invalid JSON file.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function handleImport(
+    sel: { profile: boolean; drinks: boolean; foods: boolean; plans: boolean },
+    modes: { drinks: ImportMode; foods: ImportMode; plans: ImportMode }
+  ) {
+    importData({
+      ...(sel.profile && importModal.payload.profile ? { profile: importModal.payload.profile } : {}),
+      ...(sel.drinks && importModal.payload.drinks ? { drinks: importModal.payload.drinks } : {}),
+      ...(sel.foods && importModal.payload.foods ? { foods: importModal.payload.foods } : {}),
+      ...(sel.plans && importModal.payload.plans ? { plans: importModal.payload.plans } : {}),
+      modes,
+    });
+    setImportModal({ open: false, payload: {} });
+  }
 
   return (
     <div className="px-4 pt-12 pb-nav">
@@ -488,6 +711,68 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Data Management */}
+      <section className="mb-7">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+          Data
+        </h2>
+
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={handleExport}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
+          >
+            <Download className="h-4 w-4 text-primary" />
+            Export JSON
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
+          >
+            <Upload className="h-4 w-4 text-primary" />
+            Import JSON
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        </div>
+
+        {/* Clear all */}
+        {!clearConfirm ? (
+          <button
+            onClick={() => setClearConfirm(true)}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-sm font-semibold text-destructive hover:bg-destructive/20 transition-colors"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            Clear All Data
+          </button>
+        ) : (
+          <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 flex flex-col gap-3">
+            <p className="text-sm font-semibold text-destructive text-center">
+              This resets everything to factory defaults. Are you sure?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setClearConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border bg-card text-sm font-medium text-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { clearAll(); setClearConfirm(false); }}
+                className="flex-1 py-2.5 rounded-xl bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors"
+              >
+                Yes, Clear All
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* Drink Modal */}
       <DrinkModal
         key={drinkModal.drink?.id ?? "new-drink"}
@@ -518,6 +803,15 @@ export default function SettingsPage() {
           }
           setFoodModal({ open: false });
         }}
+      />
+
+      {/* Import Modal */}
+      <ImportModal
+        key={importModal.open ? "open" : "closed"}
+        open={importModal.open}
+        payload={importModal.payload}
+        onClose={() => setImportModal({ open: false, payload: {} })}
+        onImport={handleImport}
       />
     </div>
   );
