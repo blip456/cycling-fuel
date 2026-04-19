@@ -212,6 +212,9 @@ export default function PlanResultPage() {
   const displaySchedule = editMode ? liveSchedule : result.schedule;
   const displayTotalCarbs = editMode ? liveTotalCarbs : result.totalCarbs;
   const inBottlesMl = result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
+  // Target is always duration × carbs/hr — stable even after edits
+  const targetCarbs = Math.round(result.durationHours * plan.carbsPerHour);
+  const carbsDiff = displayTotalCarbs - targetCarbs;
 
   return (
     <div className="min-h-dvh bg-background pb-nav">
@@ -311,6 +314,15 @@ export default function PlanResultPage() {
                 <span className="text-xs">Total carbs</span>
               </div>
               <p className="font-bold transition-all duration-150">{displayTotalCarbs}g</p>
+              <p className={`text-[10px] mt-0.5 font-medium ${
+                carbsDiff < -20 ? "text-amber-300" : "text-primary-foreground/50"
+              }`}>
+                {carbsDiff === 0
+                  ? `target ${targetCarbs}g ✓`
+                  : carbsDiff > 0
+                  ? `target ${targetCarbs}g (+${carbsDiff})`
+                  : `target ${targetCarbs}g (${carbsDiff})`}
+              </p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-primary-foreground/70 mb-0.5">
