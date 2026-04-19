@@ -5,12 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, Sun, Cloud, CloudRain, CloudLightning,
   Snowflake, Wind, Droplets, Flame, AlertTriangle, Bike, Coffee,
-  Pencil, X, Plus, Check, Trash2,
+  Pencil, X, Plus, Check, Trash2, Minus,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration, formatTime } from "@/lib/utils";
-import type { FuelPlan, ScheduleItem, WeatherData } from "@/lib/types";
+import type { FuelPlan, ScheduleItem, BottlePrep, WeatherData } from "@/lib/types";
 
 function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className?: string }) {
   const cls = className ?? "h-5 w-5";
@@ -31,7 +31,14 @@ function getWeatherLabel(tempC: number) {
   return { label: "Hot — stay hydrated!", color: "text-orange-500" };
 }
 
-// Local edit state: food can be null = explicitly cleared
+type EditBottle = {
+  bottleId: string;
+  bottleIndex: number;
+  mlCapacity: number;
+  drinkProductId: string | null;
+  scoops: number;
+};
+
 type EditItem = {
   timeMin: number;
   km: number;
@@ -43,11 +50,12 @@ type EditItem = {
 export default function PlanResultPage() {
   const params = useParams();
   const router = useRouter();
-  const { getPlan, savePlan, deletePlan, foods } = useStore();
+  const { getPlan, savePlan, deletePlan, foods, drinks } = useStore();
   const [plan, setPlan] = useState<FuelPlan | null>(null);
 
   const [editMode, setEditMode] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editBottles, setEditBottles] = useState<EditBottle[]>([]);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [openPickerIdx, setOpenPickerIdx] = useState<number | null>(null);
 
@@ -57,14 +65,61 @@ export default function PlanResultPage() {
     else router.replace("/");
   }, [params.id, getPlan, router]);
 
-  // Live carb recalculation as user edits
+  // Derive live bottle prep (carbs recalculate when drink/scoops change)
+  const liveBottles = useMemo((): BottlePrep[] => {
+    return editBottles.map((eb) => {
+      const product = drinks.find((d) => d.id === eb.drinkProductId);
+      if (!product) {
+        return {
+          bottleId: eb.bottleId,
+          bottleIndex: eb.bottleIndex,
+          mlCapacity: eb.mlCapacity,
+          drinkName: "Water",
+          scoops: 0,
+          waterMl: eb.mlCapacity,
+          carbsTotal: 0,
+        };
+      }
+      const carbsTotal = Math.round(
+        (eb.scoops / product.scoopsRecommended) * product.carbsPerServing
+      );
+      return {
+        bottleId: eb.bottleId,
+        bottleIndex: eb.bottleIndex,
+        mlCapacity: eb.mlCapacity,
+        drinkProductId: product.id,
+        drinkName: product.flavour ? `${product.name} (${product.flavour})` : product.name,
+        scoops: eb.scoops,
+        waterMl: eb.mlCapacity,
+        carbsTotal,
+      };
+    });
+  }, [editBottles, drinks]);
+
+  // Live schedule: recalculate drink carbs from updated bottles
   const liveSchedule = useMemo(() => {
     let cum = 0;
     return editItems.map((item) => {
-      cum += (item.drink?.carbs ?? 0) + (item.food?.carbs ?? 0);
-      return { ...item, cumulativeCarbs: cum, food: item.food ?? undefined };
+      let drinkCarbs = 0;
+      let updatedDrink = item.drink;
+      if (item.drink) {
+        const bottle = liveBottles.find((b) => b.bottleIndex === item.drink!.bottleIndex);
+        if (bottle) {
+          drinkCarbs = bottle.carbsTotal > 0
+            ? Math.round((item.drink.mlAmount / bottle.mlCapacity) * bottle.carbsTotal)
+            : 0;
+          updatedDrink = {
+            ...item.drink,
+            carbs: drinkCarbs,
+            drinkName: bottle.drinkName === "Water" ? "Water" : bottle.drinkName.split(" (")[0],
+          };
+        }
+      }
+      const foodCarbs = item.food?.carbs ?? 0;
+      cum += drinkCarbs + foodCarbs;
+      return { ...item, drink: updatedDrink, cumulativeCarbs: cum, food: item.food ?? undefined };
     });
-  }, [editItems]);
+  }, [editItems, liveBottles]);
 
   const liveTotalCarbs =
     liveSchedule.length > 0
@@ -73,6 +128,15 @@ export default function PlanResultPage() {
 
   function enterEditMode() {
     if (!plan?.result) return;
+    setEditBottles(
+      plan.result.bottlePrep.map((b) => ({
+        bottleId: b.bottleId,
+        bottleIndex: b.bottleIndex,
+        mlCapacity: b.mlCapacity,
+        drinkProductId: b.drinkProductId ?? null,
+        scoops: b.scoops,
+      }))
+    );
     setEditItems(plan.result.schedule.map((s) => ({ ...s })));
     setEditMode(true);
     setOpenPickerIdx(null);
@@ -81,6 +145,27 @@ export default function PlanResultPage() {
   function cancelEdit() {
     setEditMode(false);
     setOpenPickerIdx(null);
+  }
+
+  function setBottleDrink(idx: number, productId: string | null) {
+    setEditBottles((prev) =>
+      prev.map((b, i) => {
+        if (i !== idx) return b;
+        const product = drinks.find((d) => d.id === productId);
+        const defaultScoops = product
+          ? Math.round((b.mlCapacity / product.mlPerServing) * product.scoopsRecommended)
+          : 0;
+        return { ...b, drinkProductId: productId, scoops: defaultScoops };
+      })
+    );
+  }
+
+  function stepBottleScoops(idx: number, delta: number) {
+    setEditBottles((prev) =>
+      prev.map((b, i) =>
+        i === idx ? { ...b, scoops: Math.max(1, b.scoops + delta) } : b
+      )
+    );
   }
 
   function removeFood(idx: number) {
@@ -99,6 +184,7 @@ export default function PlanResultPage() {
       ...plan,
       result: {
         ...plan.result,
+        bottlePrep: liveBottles,
         schedule: liveSchedule,
         totalCarbs: liveTotalCarbs,
       },
@@ -122,9 +208,9 @@ export default function PlanResultPage() {
 
   const { result } = plan;
   const weatherMeta = plan.weather ? getWeatherLabel(plan.weather.tempC) : null;
+  const displayBottles = editMode ? liveBottles : result.bottlePrep;
   const displaySchedule = editMode ? liveSchedule : result.schedule;
   const displayTotalCarbs = editMode ? liveTotalCarbs : result.totalCarbs;
-  // Total fluid in bottles = what the schedule actually distributes
   const inBottlesMl = result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
 
   return (
@@ -141,7 +227,7 @@ export default function PlanResultPage() {
                 <X className="h-3.5 w-3.5" />
                 Cancel
               </button>
-              <span className="text-xs font-medium text-muted-foreground">Editing schedule</span>
+              <span className="text-xs font-medium text-muted-foreground">Editing plan</span>
               <button
                 onClick={saveChanges}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
@@ -164,7 +250,7 @@ export default function PlanResultPage() {
                 <button
                   onClick={enterEditMode}
                   className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground"
-                  title="Edit schedule"
+                  title="Edit plan"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -261,38 +347,111 @@ export default function PlanResultPage() {
 
         {/* Bottle prep */}
         <section>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-            Tonight: Prep Your Bottles
-          </h2>
-          <div className="flex flex-col gap-2">
-            {result.bottlePrep.map((bottle) => (
-              <div key={bottle.bottleId} className="bg-card border border-border rounded-2xl p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-sage-light flex items-center justify-center">
-                      <Droplets className="h-4 w-4 text-primary" />
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Tonight: Prep Your Bottles
+            </h2>
+            {editMode && (
+              <span className="text-xs text-primary font-medium bg-sage-light px-2 py-1 rounded-lg">
+                Tap to change drink
+              </span>
+            )}
+          </div>
+          <div className={`flex flex-col gap-2 ${editMode ? "rounded-2xl border border-primary/40 p-3 bg-card" : ""}`}>
+            {displayBottles.map((bottle, bi) => {
+              const eb = editMode ? editBottles[bi] : null;
+              const product = eb ? drinks.find((d) => d.id === eb.drinkProductId) : null;
+
+              return (
+                <div key={bottle.bottleId} className={`${editMode ? "" : "bg-card border border-border rounded-2xl"} p-4`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-sage-light flex items-center justify-center shrink-0">
+                        <Droplets className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Bottle {bottle.bottleIndex}</p>
+                        <p className="text-xs text-muted-foreground">{bottle.mlCapacity}ml</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Bottle {bottle.bottleIndex}</p>
-                      <p className="text-xs text-muted-foreground">{bottle.mlCapacity}ml capacity</p>
-                    </div>
+                    {bottle.carbsTotal > 0 && (
+                      <span className="text-sm font-bold text-primary">{bottle.carbsTotal}g</span>
+                    )}
                   </div>
-                  {bottle.carbsTotal > 0 && (
-                    <span className="text-sm font-bold text-primary">{bottle.carbsTotal}g</span>
+
+                  {/* View mode: drink summary */}
+                  {!editMode && (
+                    <div className="mt-3 pl-10">
+                      <p className="text-sm font-medium text-foreground">{bottle.drinkName}</p>
+                      {bottle.scoops > 0 ? (
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          {bottle.scoops} scoop{bottle.scoops !== 1 ? "s" : ""} + {bottle.waterMl}ml water
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground mt-0.5">{bottle.waterMl}ml water</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Edit mode: drink selector + scoop stepper */}
+                  {editMode && eb && (
+                    <div className="mt-3 pl-10 flex flex-col gap-3">
+                      {/* Drink chips */}
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() => setBottleDrink(bi, null)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all ${
+                            eb.drinkProductId === null
+                              ? "bg-primary text-white border-primary"
+                              : "bg-background text-muted-foreground border-border hover:border-primary/40"
+                          }`}
+                        >
+                          Water only
+                        </button>
+                        {drinks.map((d) => (
+                          <button
+                            key={d.id}
+                            onClick={() => setBottleDrink(bi, d.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-medium border-2 transition-all ${
+                              eb.drinkProductId === d.id
+                                ? "bg-primary text-white border-primary"
+                                : "bg-background text-foreground border-border hover:border-primary/40"
+                            }`}
+                          >
+                            {d.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Scoop stepper (only when a drink is selected) */}
+                      {eb.drinkProductId !== null && product && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-muted-foreground">Scoops:</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => stepBottleScoops(bi, -1)}
+                              className="w-7 h-7 rounded-lg bg-muted border border-border flex items-center justify-center hover:bg-border transition-colors"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                            <span className="w-5 text-center text-sm font-semibold">{eb.scoops}</span>
+                            <button
+                              onClick={() => stepBottleScoops(bi, 1)}
+                              className="w-7 h-7 rounded-lg bg-muted border border-border flex items-center justify-center hover:bg-border transition-colors"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                          </div>
+                          <span className="text-xs text-primary font-medium ml-auto">
+                            → {liveBottles[bi]?.carbsTotal ?? 0}g carbs
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-                <div className="mt-3 pl-10">
-                  <p className="text-sm font-medium text-foreground">{bottle.drinkName}</p>
-                  {bottle.scoops > 0 ? (
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {bottle.scoops} scoop{bottle.scoops !== 1 ? "s" : ""} + {bottle.waterMl}ml water
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground mt-0.5">{bottle.waterMl}ml water</p>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -317,19 +476,13 @@ export default function PlanResultPage() {
               return (
                 <div key={i} className={!isLast ? "border-b border-border" : ""}>
                   <div className="flex items-start gap-3 px-4 py-3.5">
-                    {/* Time / km */}
                     <div className="shrink-0 w-16 text-right">
                       <p className="text-xs font-semibold text-foreground">{formatTime(item.timeMin)}</p>
                       <p className="text-xs text-muted-foreground">km {item.km}</p>
                     </div>
-
                     <div className="w-px bg-border self-stretch" />
-
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
-                      {item.note && (
-                        <p className="text-sm text-muted-foreground">{item.note}</p>
-                      )}
+                      {item.note && <p className="text-sm text-muted-foreground">{item.note}</p>}
                       {item.drink && (
                         <div className="flex items-center gap-1.5">
                           <Droplets className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -389,8 +542,6 @@ export default function PlanResultPage() {
                         </div>
                       )}
                     </div>
-
-                    {/* Cumulative carbs */}
                     <div className="shrink-0 text-right">
                       <p className="text-xs font-semibold text-primary">{item.cumulativeCarbs}g</p>
                       <p className="text-xs text-muted-foreground">total</p>
@@ -400,16 +551,11 @@ export default function PlanResultPage() {
                   {/* Food picker */}
                   {pickerOpen && (
                     <div className="px-4 pb-3 pt-0 border-t border-dashed border-border bg-muted/30">
-                      <p className="text-xs text-muted-foreground font-medium mb-2 pt-2.5">
-                        Select food:
-                      </p>
+                      <p className="text-xs text-muted-foreground font-medium mb-2 pt-2.5">Select food:</p>
                       {foods.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
                           No foods in your list.{" "}
-                          <button
-                            onClick={() => router.push("/settings")}
-                            className="text-primary underline"
-                          >
+                          <button onClick={() => router.push("/settings")} className="text-primary underline">
                             Add in Settings
                           </button>
                         </p>

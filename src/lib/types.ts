@@ -45,6 +45,7 @@ export interface BottlePrep {
   bottleId: string;
   bottleIndex: number;
   mlCapacity: number;
+  drinkProductId?: string; // undefined = water only
   drinkName: string;
   scoops: number;
   waterMl: number;

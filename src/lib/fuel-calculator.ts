@@ -88,6 +88,7 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       bottleId: bottle.id,
       bottleIndex: i + 1,
       mlCapacity: bottle.mlCapacity,
+      drinkProductId: product.id,
       drinkName: product.flavour ? `${product.name} (${product.flavour})` : product.name,
       scoops: scaledScoops,
       waterMl: bottle.mlCapacity,
