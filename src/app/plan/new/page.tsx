@@ -374,14 +374,17 @@ export default function NewPlanPage() {
                         </button>
                       ))}
                     </div>
-                    {data.bottles.length > 1 && (
-                      <button
-                        onClick={() => removeBottle(bottle.id)}
-                        className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => removeBottle(bottle.id)}
+                      disabled={data.bottles.length <= 1}
+                      className={`p-1 rounded-lg transition-colors shrink-0 ${
+                        data.bottles.length > 1
+                          ? "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          : "invisible"
+                      }`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
                 ))}
                 <button
