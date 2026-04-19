@@ -82,6 +82,16 @@ body {
   padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
 }
 
+/* Position a fixed element just above the bottom nav (~62px tall) */
+.bottom-above-nav {
+  bottom: calc(env(safe-area-inset-bottom) + 3.875rem);
+}
+
+/* Scroll padding that clears both the bottom nav and a fixed footer above it */
+.pb-wizard {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 10rem);
+}
+
 /* Smooth scrolling */
 .scroll-smooth {
   -webkit-overflow-scrolling: touch;

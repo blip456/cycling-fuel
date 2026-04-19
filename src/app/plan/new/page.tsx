@@ -205,7 +205,7 @@ export default function NewPlanPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 pb-28">
+      <div className="flex-1 overflow-y-auto px-4 py-6 pb-wizard">
         {/* STEP 1: Ride Details */}
         {step === 1 && (
           <div className="flex flex-col gap-5">
@@ -518,8 +518,8 @@ export default function NewPlanPage() {
         )}
       </div>
 
-      {/* Footer buttons */}
-      <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border px-4 py-3 safe-bottom max-w-lg mx-auto">
+      {/* Footer buttons — sits above the bottom nav */}
+      <div className="fixed bottom-above-nav left-0 right-0 z-50 bg-card border-t border-border px-4 py-3 max-w-lg mx-auto">
         {step < 3 ? (
           <Button
             className="w-full"
