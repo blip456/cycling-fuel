@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, MapPin, Loader2, Plus, Minus, X, Check } from "lucide-react";
 import { format } from "date-fns";
@@ -38,6 +38,16 @@ interface WizardData {
 }
 
 const today = format(new Date(), "yyyy-MM-dd");
+const DRAFT_KEY = "cyclefuel-wizard-draft";
+
+function loadDraft(): Partial<WizardData> | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function NewPlanPage() {
   const router = useRouter();
@@ -45,18 +55,30 @@ export default function NewPlanPage() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const initialized = useRef(false);
 
-  const [data, setData] = useState<WizardData>({
-    distance: "",
-    avgSpeed: "",
-    rideDate: today,
-    location: "",
-    carbsPerHour: profile.defaultCarbsPerHour,
-    bottles: [{ id: generateId(), mlCapacity: profile.defaultBottleMl }],
-    includeSolidFood: true,
-    selectedDrinks: drinks.map((d) => ({ productId: d.id, scoopsOverride: undefined })),
-    selectedFoods: foods.map((f) => f.id),
+  const [data, setData] = useState<WizardData>(() => {
+    const defaults: WizardData = {
+      distance: "",
+      avgSpeed: "",
+      rideDate: today,
+      location: "",
+      carbsPerHour: profile.defaultCarbsPerHour,
+      bottles: [{ id: generateId(), mlCapacity: profile.defaultBottleMl }],
+      includeSolidFood: true,
+      selectedDrinks: drinks.map((d) => ({ productId: d.id, scoopsOverride: undefined })),
+      selectedFoods: foods.map((f) => f.id),
+    };
+    if (typeof window === "undefined") return defaults;
+    const draft = loadDraft();
+    return draft ? { ...defaults, ...draft } : defaults;
   });
+
+  // Persist draft on every change
+  useEffect(() => {
+    if (!initialized.current) { initialized.current = true; return; }
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+  }, [data]);
 
   const distanceNum = parseFloat(data.distance) || 0;
   const speedNum = parseFloat(data.avgSpeed) || 0;
@@ -179,6 +201,7 @@ export default function NewPlanPage() {
     };
 
     savePlan(plan);
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
     router.push(`/plan/${planId}`);
   }
 

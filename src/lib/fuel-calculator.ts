@@ -86,7 +86,7 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     // Scale scoops proportionally to bottle size vs serving size
     const scaledScoops = Math.round((bottle.mlCapacity / product.mlPerServing) * scoops);
     const carbsTotal = Math.round((scaledScoops / product.scoopsRecommended) * product.carbsPerServing);
-    const waterMl = Math.round(bottle.mlCapacity * 0.95); // leave room for powder
+    const waterMl = bottle.mlCapacity; // fill to bottle capacity with water
 
     return {
       bottleId: bottle.id,
