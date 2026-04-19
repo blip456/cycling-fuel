@@ -124,6 +124,8 @@ export default function PlanResultPage() {
   const weatherMeta = plan.weather ? getWeatherLabel(plan.weather.tempC) : null;
   const displaySchedule = editMode ? liveSchedule : result.schedule;
   const displayTotalCarbs = editMode ? liveTotalCarbs : result.totalCarbs;
+  // Total fluid in bottles = what the schedule actually distributes
+  const inBottlesMl = result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
 
   return (
     <div className="min-h-dvh bg-background pb-nav">
@@ -227,9 +229,9 @@ export default function PlanResultPage() {
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-primary-foreground/70 mb-0.5">
                 <Droplets className="h-3.5 w-3.5" />
-                <span className="text-xs">Fluid</span>
+                <span className="text-xs">In bottles</span>
               </div>
-              <p className="font-bold">{Math.round(result.totalFluidMl / 100) / 10}L</p>
+              <p className="font-bold">{Math.round(inBottlesMl / 100) / 10}L</p>
             </div>
           </div>
         </div>
