@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useStore } from "@/lib/store";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { geocodeLocation, fetchWeather } from "@/lib/weather";
@@ -400,21 +401,10 @@ export default function NewPlanPage() {
                 <p className="text-sm font-medium text-foreground">Include Solid Food?</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Bars, gels, bananas, etc.</p>
               </div>
-              <button
-                role="switch"
-                aria-checked={data.includeSolidFood}
-                onClick={() => update("includeSolidFood", !data.includeSolidFood)}
-                className={`relative inline-flex h-[31px] w-[51px] shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                  data.includeSolidFood ? "bg-primary" : "bg-muted"
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none inline-block h-[27px] w-[27px] rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ${
-                    data.includeSolidFood ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
+              <Switch
+                checked={data.includeSolidFood}
+                onCheckedChange={(v) => update("includeSolidFood", v)}
+              />
             </div>
           </div>
         )}
