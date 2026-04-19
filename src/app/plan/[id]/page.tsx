@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, Sun, Cloud, CloudRain, CloudLightning,
   Snowflake, Wind, Droplets, Flame, AlertTriangle, Bike, Coffee,
-  Pencil, X, Plus, Check,
+  Pencil, X, Plus, Check, Trash2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
@@ -43,10 +43,11 @@ type EditItem = {
 export default function PlanResultPage() {
   const params = useParams();
   const router = useRouter();
-  const { getPlan, savePlan, foods } = useStore();
+  const { getPlan, savePlan, deletePlan, foods } = useStore();
   const [plan, setPlan] = useState<FuelPlan | null>(null);
 
   const [editMode, setEditMode] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [openPickerIdx, setOpenPickerIdx] = useState<number | null>(null);
 
@@ -444,6 +445,37 @@ export default function PlanResultPage() {
           <ExternalLink className="h-4 w-4" />
           Open Minimal / Print View
         </button>
+
+        {/* Delete plan */}
+        {!confirmDelete ? (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete this plan
+          </button>
+        ) : (
+          <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 flex flex-col gap-3">
+            <p className="text-sm font-semibold text-destructive text-center">
+              Delete this plan permanently?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border bg-card text-sm font-medium text-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { deletePlan(plan.id); router.replace("/"); }}
+                className="flex-1 py-2.5 rounded-xl bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
