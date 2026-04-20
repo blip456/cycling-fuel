@@ -173,44 +173,76 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       }
     });
 
-    // Distribute fluid across intervals
-    const remainingMl = bottlePrep.map((b) => b.mlCapacity);
-    const totalInitialMl = remainingMl.reduce((a, b) => a + b, 0);
-    const mlPerInterval =
-      drinkIntervals.length > 0 ? Math.round(totalInitialMl / drinkIntervals.length) : 0;
+    // Sip-based fluid distribution (1 sip = 50ml, science-backed mouthful size)
+    const SIP_ML = 50;
+    const totalBottleMl = bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
+    const totalSips = Math.round(totalBottleMl / SIP_ML);
+    const sipsPerBottle = bottlePrep.map((b) => Math.round(b.mlCapacity / SIP_ML));
+    const remainingBottleSips = [...sipsPerBottle];
     let currentBottleIdx = 0;
+    let cumulativeSipsAssigned = 0;
 
-    drinkIntervals.forEach((timeMin) => {
+    drinkIntervals.forEach((timeMin, idx) => {
       const km = Math.round((timeMin / 60) * avgSpeed);
       const food = foodByInterval.get(timeMin) ?? null;
 
-      // Advance to next bottle if current is empty
-      while (currentBottleIdx < bottlePrep.length - 1 && remainingMl[currentBottleIdx] <= 0) {
+      // Advance past empty bottles
+      while (currentBottleIdx < bottlePrep.length - 1 && remainingBottleSips[currentBottleIdx] <= 0) {
         currentBottleIdx++;
       }
 
-      let drinkInfo: ScheduleItem["drink"] | undefined;
-      if (bottlePrep.length > 0 && mlPerInterval > 0) {
-        const b = bottlePrep[currentBottleIdx];
-        const drinkMl = Math.min(mlPerInterval, remainingMl[currentBottleIdx]);
-        remainingMl[currentBottleIdx] -= drinkMl;
+      // Cumulative rounding: how many sips should have been drunk by end of this interval?
+      const targetCumSips =
+        drinkIntervals.length > 0
+          ? Math.round((totalSips * (idx + 1)) / drinkIntervals.length)
+          : 0;
+      const sipsNeeded = Math.max(0, targetCumSips - cumulativeSipsAssigned);
 
-        if (drinkMl > 0) {
-          const carbFromDrink =
-            b.carbsTotal > 0 ? Math.round((drinkMl / b.mlCapacity) * b.carbsTotal) : 0;
-          cumulativeCarbs += carbFromDrink;
-          drinkInfo = {
-            bottleIndex: b.bottleIndex,
-            drinkName: b.drinkName === "Water" ? "Water" : b.drinkName.split(" (")[0],
-            mlAmount: drinkMl,
-            carbs: carbFromDrink,
-          };
+      // Assign sips — may span across bottle boundary
+      let sipsLeft = sipsNeeded;
+      let intervalCarbs = 0;
+      let bottleFinished = false;
+      const startBottleIdx = currentBottleIdx;
+
+      while (sipsLeft > 0 && currentBottleIdx < bottlePrep.length) {
+        const fromThisBottle = Math.min(sipsLeft, remainingBottleSips[currentBottleIdx]);
+        if (fromThisBottle > 0) {
+          const b = bottlePrep[currentBottleIdx];
+          intervalCarbs +=
+            sipsPerBottle[currentBottleIdx] > 0
+              ? Math.round((fromThisBottle * b.carbsTotal) / sipsPerBottle[currentBottleIdx])
+              : 0;
+          remainingBottleSips[currentBottleIdx] -= fromThisBottle;
+          sipsLeft -= fromThisBottle;
         }
+        if (remainingBottleSips[currentBottleIdx] <= 0 && currentBottleIdx < bottlePrep.length - 1) {
+          bottleFinished = true;
+          currentBottleIdx++;
+        } else {
+          break;
+        }
+      }
+
+      const actualSips = sipsNeeded - sipsLeft;
+      cumulativeSipsAssigned += actualSips;
+
+      let drinkInfo: ScheduleItem["drink"] | undefined;
+      if (actualSips > 0 && bottlePrep.length > 0) {
+        const b = bottlePrep[startBottleIdx];
+        drinkInfo = {
+          bottleIndex: b.bottleIndex,
+          drinkName: b.drinkName === "Water" ? "Water" : b.drinkName.split(" (")[0],
+          mlAmount: actualSips * SIP_ML,
+          sips: actualSips,
+          carbs: intervalCarbs,
+          ...(bottleFinished ? { bottleFinished: true } : {}),
+        };
       }
 
       if (food) {
         cumulativeCarbs += food.carbsPerServing;
       }
+      cumulativeCarbs += intervalCarbs;
 
       schedule.push({
         timeMin,

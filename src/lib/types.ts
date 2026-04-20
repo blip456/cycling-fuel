@@ -59,7 +59,9 @@ export interface ScheduleItem {
     bottleIndex: number;
     drinkName: string;
     mlAmount: number;
+    sips: number;
     carbs: number;
+    bottleFinished?: boolean;
   };
   food?: {
     name: string;

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, Sun, Cloud, CloudRain, CloudLightning,
   Snowflake, Wind, Droplets, Flame, AlertTriangle, Bike, Coffee,
-  Pencil, X, Plus, Check, Trash2, Minus,
+  Pencil, X, Plus, Check, Trash2, Minus, Info,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
@@ -55,6 +55,9 @@ export default function PlanResultPage() {
 
   const [editMode, setEditMode] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sipHintDismissed, setSipHintDismissed] = useState(() => {
+    try { return localStorage.getItem("sipHintDismissed") === "1"; } catch { return false; }
+  });
   const [editBottles, setEditBottles] = useState<EditBottle[]>([]);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [openPickerIdx, setOpenPickerIdx] = useState<number | null>(null);
@@ -496,6 +499,22 @@ export default function PlanResultPage() {
             )}
           </div>
 
+          {!sipHintDismissed && (
+            <div className="flex items-center gap-3 bg-sky-50 border border-sky-200 rounded-2xl px-4 py-3 mb-3">
+              <Info className="h-4 w-4 text-sky-500 shrink-0" />
+              <p className="text-sm text-sky-800 flex-1">1 sip ≈ 50ml — a normal mouthful from a bottle.</p>
+              <button
+                onClick={() => {
+                  setSipHintDismissed(true);
+                  try { localStorage.setItem("sipHintDismissed", "1"); } catch { /* ignore */ }
+                }}
+                className="p-1 rounded-lg hover:bg-sky-100 text-sky-400 hover:text-sky-600 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className={`bg-card border rounded-2xl overflow-hidden ${editMode ? "border-primary/40" : "border-border"}`}>
             {displaySchedule.map((item, i) => {
               const isLast = i === displaySchedule.length - 1;
@@ -516,9 +535,14 @@ export default function PlanResultPage() {
                           <Droplets className="h-3.5 w-3.5 text-primary shrink-0" />
                           <p className="text-sm text-foreground">
                             <span className="font-medium">B{item.drink.bottleIndex}</span>{" "}
-                            {item.drink.drinkName} — {item.drink.mlAmount}ml
+                            {item.drink.sips != null
+                              ? `${item.drink.sips} sip${item.drink.sips !== 1 ? "s" : ""}`
+                              : `${item.drink.mlAmount}ml`}
                             {item.drink.carbs > 0 && (
                               <span className="text-muted-foreground"> ({item.drink.carbs}g)</span>
+                            )}
+                            {item.drink.bottleFinished && (
+                              <span className="text-amber-600 text-xs ml-1.5 font-medium">finish → next bottle</span>
                             )}
                           </p>
                         </div>
