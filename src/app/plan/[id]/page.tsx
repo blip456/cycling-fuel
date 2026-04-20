@@ -10,6 +10,7 @@ import {
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration, formatTime } from "@/lib/utils";
+import { generateInsights, type PlanInsight } from "@/lib/plan-insights";
 import type { FuelPlan, ScheduleItem, BottlePrep, WeatherData } from "@/lib/types";
 
 function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className?: string }) {
@@ -22,6 +23,24 @@ function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className
     case "fog": return <Wind className={cls} />;
     default: return <Cloud className={cls} />;
   }
+}
+
+function InsightCard({ insight }: { insight: PlanInsight }) {
+  const styles = {
+    error:      { wrap: "bg-red-50 border-red-200",    icon: "text-red-500",    title: "text-red-900",    body: "text-red-700" },
+    warning:    { wrap: "bg-amber-50 border-amber-200", icon: "text-amber-500",  title: "text-amber-900",  body: "text-amber-700" },
+    suggestion: { wrap: "bg-sky-50 border-sky-200",    icon: "text-sky-500",    title: "text-sky-900",    body: "text-sky-700" },
+  }[insight.level];
+  const Icon = insight.level === "error" || insight.level === "warning" ? AlertTriangle : Info;
+  return (
+    <div className={`rounded-2xl border px-4 py-3.5 flex gap-3 ${styles.wrap}`}>
+      <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${styles.icon}`} />
+      <div>
+        <p className={`text-sm font-semibold leading-snug ${styles.title}`}>{insight.title}</p>
+        <p className={`text-xs mt-0.5 leading-relaxed ${styles.body}`}>{insight.detail}</p>
+      </div>
+    </div>
+  );
 }
 
 function getWeatherLabel(tempC: number) {
@@ -364,17 +383,23 @@ export default function PlanResultPage() {
           </div>
         )}
 
-        {/* Warnings */}
-        {result.warnings.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {result.warnings.map((w, i) => (
-              <div key={i} className="flex gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-3.5">
-                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-800">{w}</p>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Insights panel — calc warnings + smart suggestions */}
+        {(() => {
+          const extra = generateInsights(plan, result);
+          const calcInsights: PlanInsight[] = result.warnings.map((w, i) => ({
+            id: `calc-${i}`,
+            level: "warning" as const,
+            title: w.split(". ")[0] ?? w,
+            detail: w,
+          }));
+          const allInsights = [...calcInsights, ...extra];
+          if (allInsights.length === 0) return null;
+          return (
+            <div className="flex flex-col gap-2">
+              {allInsights.map((ins) => <InsightCard key={ins.id} insight={ins} />)}
+            </div>
+          );
+        })()}
 
         {/* Bottle prep */}
         <section>
@@ -591,6 +616,34 @@ export default function PlanResultPage() {
                               Add food
                             </button>
                           )}
+
+                          {/* Food placement science validation */}
+                          {item.food && (() => {
+                            const totalMin = result.durationHours * 60;
+                            const violations: string[] = [];
+                            if (item.timeMin < 30)
+                              violations.push("before 30 min warmup");
+                            if (item.timeMin > totalMin - 20)
+                              violations.push("inside 20 min finish cutoff");
+                            for (let j = 0; j < displaySchedule.length; j++) {
+                              if (j !== i && displaySchedule[j].food) {
+                                const gap = Math.abs(displaySchedule[j].timeMin - item.timeMin);
+                                if (gap < 50) {
+                                  violations.push(`only ${gap} min from another food`);
+                                  break;
+                                }
+                              }
+                            }
+                            if (violations.length === 0) return null;
+                            return (
+                              <div className="flex items-center gap-1.5 mt-1.5 px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg">
+                                <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                                <span className="text-xs font-medium text-red-700">
+                                  ⚠ {violations.join(" · ")}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>

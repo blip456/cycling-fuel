@@ -270,9 +270,10 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       "You're targeting >60g carbs/hr with a single-source carb drink. Consider a drink with glucose + fructose (1:1 or 2:1 ratio) to avoid GI distress."
     );
   }
-  if (carbsPerHour >= 90 && activeDrinks.some((ad) => ad.product.carbRatio === "1:1")) {
+  if (carbsPerHour >= 120 && activeDrinks.length > 0 &&
+      activeDrinks.every((ad) => ad.product.carbRatio !== "1:1")) {
     warnings.push(
-      "For 90g+/hr, a 2:1 glucose:fructose ratio is recommended for better gut absorption."
+      "At 120g/hr, a 1:1 glucose:fructose drink fully saturates both SGLT1 and GLUT5 transporters. A 2:1 ratio starts to bottleneck at this intake level."
     );
   }
   if (weather && weather.tempC > 25) {

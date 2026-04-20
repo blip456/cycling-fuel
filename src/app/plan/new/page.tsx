@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, MapPin, Loader2, Plus, Minus, X, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPin, Loader2, Plus, Minus, X, Check, AlertTriangle, Info } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { useStore } from "@/lib/store";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { geocodeLocation, fetchWeather } from "@/lib/weather";
 import { formatDuration, generateId } from "@/lib/utils";
+import { recommendedCarbsPerHour, calcMaxFoodItems } from "@/lib/plan-insights";
 import type { Bottle, SelectedDrink, FuelPlan } from "@/lib/types";
 
 const CARB_OPTIONS = [45, 60, 90, 120] as const;
@@ -350,6 +351,33 @@ export default function NewPlanPage() {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mt-2 px-1">{CARB_TIPS[data.carbsPerHour]}</p>
+
+              {/* Duration-based carb suggestion */}
+              {(() => {
+                if (duration <= 0) return null;
+                const rec = recommendedCarbsPerHour(duration);
+                if (data.carbsPerHour >= rec) return null;
+                return (
+                  <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-3 flex items-start gap-3">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-amber-800">
+                        {rec}g/hr recommended for a {formatDuration(duration)} ride
+                      </p>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        At {data.carbsPerHour}g/hr glycogen may run out before the finish.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => update("carbsPerHour", rec)}
+                      className="shrink-0 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                    >
+                      Set {rec}g →
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Bottles */}
@@ -396,6 +424,26 @@ export default function NewPlanPage() {
                 </button>
               </div>
             </div>
+
+            {/* Bottle volume hint */}
+            {(() => {
+              if (duration <= 0) return null;
+              const totalMl = data.bottles.reduce((s, b) => s + b.mlCapacity, 0);
+              const estimatedMl = Math.round(duration * 500); // 500ml/hr baseline
+              if (totalMl >= estimatedMl * 0.75) return null;
+              return (
+                <div className="rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-3 flex items-start gap-3">
+                  <Info className="h-4 w-4 text-sky-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-sky-800">Bottles may be short on fluid</p>
+                    <p className="text-xs text-sky-700 mt-0.5">
+                      {formatDuration(duration)} ride needs ~{(estimatedMl / 1000).toFixed(1)}L (500ml/hr baseline).
+                      You have {(totalMl / 1000).toFixed(1)}L — consider adding a bottle.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Solid food */}
             <div className="flex items-center justify-between bg-card rounded-xl border border-border px-4 py-3.5">
@@ -508,6 +556,35 @@ export default function NewPlanPage() {
               )}
             </div>
 
+            {/* Drink ratio warning */}
+            {(() => {
+              if (data.carbsPerHour < 90 || data.selectedDrinks.length === 0) return null;
+              const selectedProducts = data.selectedDrinks
+                .map((sd) => drinks.find((d) => d.id === sd.productId))
+                .filter(Boolean);
+              if (selectedProducts.length === 0) return null;
+              const allSingle = selectedProducts.every((d) => d!.carbRatio === "single");
+              const noOneToOne = data.carbsPerHour >= 120 && selectedProducts.every((d) => d!.carbRatio !== "1:1");
+              if (!allSingle && !noOneToOne) return null;
+              return (
+                <div className="rounded-xl bg-red-50 border border-red-200 px-3.5 py-3 flex items-start gap-3">
+                  <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-800">
+                      {allSingle
+                        ? "Single-source drinks can't support 90g/hr"
+                        : "120g/hr performs best with a 1:1 ratio drink"}
+                    </p>
+                    <p className="text-xs text-red-700 mt-0.5">
+                      {allSingle
+                        ? "SGLT1 saturates at ~60g/hr. Without fructose (2:1 or 1:1 ratio), excess glucose causes GI distress."
+                        : "At 120g/hr, equal glucose:fructose (1:1) fully saturates both SGLT1 and GLUT5 transporters."}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Solid Foods */}
             {data.includeSolidFood && (
               <div>
@@ -546,6 +623,30 @@ export default function NewPlanPage() {
                     })}
                   </div>
                 )}
+
+                {/* Food count vs schedule capacity */}
+                {(() => {
+                  if (duration <= 0 || data.selectedFoods.length === 0) return null;
+                  const maxItems = calcMaxFoodItems(duration);
+                  const selected = data.selectedFoods.length;
+                  if (selected <= maxItems) {
+                    return (
+                      <p className="text-xs text-muted-foreground mt-2 px-1">
+                        {selected} item{selected !== 1 ? "s" : ""} selected · schedule fits up to {maxItems} in feed window
+                      </p>
+                    );
+                  }
+                  const dropped = selected - maxItems;
+                  return (
+                    <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-3 flex items-start gap-3">
+                      <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                      <p className="text-sm text-amber-800">
+                        Only <strong>{maxItems}</strong> item{maxItems !== 1 ? "s" : ""} fit in the feed window
+                        ({dropped} will be dropped — 50-min spacing + 20-min cutoff rule).
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

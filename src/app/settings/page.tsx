@@ -537,11 +537,6 @@ export default function SettingsPage() {
 
   return (
     <div className="px-4 pt-12 pb-nav">
-      {/* Brand lockup */}
-      <div className="flex items-center gap-3 mb-5">
-        <img src="/icons/icon.svg" alt="CycleFuel" className="h-11 w-11 rounded-2xl shadow-sm" aria-hidden="true" />
-        <span className="text-[11px] font-bold tracking-[0.18em] uppercase text-primary select-none">CycleFuel</span>
-      </div>
       <h1 className="text-2xl font-bold text-foreground mb-6">Settings</h1>
 
       {/* Profile */}
