@@ -141,11 +141,35 @@ export default function HelpPage() {
       {/* Solid food */}
       <Section emoji="🍌" title="Solid food pacing">
         <Card>
-          <p className="text-muted-foreground">Solid food is scheduled at a maximum rate of <span className="text-foreground font-medium">one item per 50 minutes</span>. Eating more frequently than this risks GI distress at race intensity.</p>
+          <div className="divide-y divide-border">
+            <Stat label="Minimum warmup" value="30 min before first food" />
+            <Stat label="Spacing between items" value="Every 50 min" />
+            <Stat label="Feed window closes" value="20 min before finish" />
+          </div>
         </Card>
-        <Accordion title="How is the food gap calculated?">
-          <p className="mb-2">CycleFuel first works out how many carbs your drinks will deliver across the whole ride (accounting for bottle refills). The remaining carb gap is filled by solid food items.</p>
-          <p>Food is only scheduled between minute ~30–45 (after your body has warmed up) and 20 minutes before the finish (when eating stops being useful).</p>
+        <Accordion title="Why wait 30 minutes before eating?">
+          <p className="mb-2">During the first 30 minutes your body is ramping up — blood is redirecting to working muscles, heart rate is climbing and your digestive system is winding down. Eating solid food too early competes with that process and dramatically increases the risk of GI distress.</p>
+          <p>For longer rides (&gt; ~5 hours), CycleFuel delays the first food item to up to 45 minutes, scaling with ride duration, to give your gut even more time to settle before the deep-effort phase begins.</p>
+        </Accordion>
+        <Accordion title="Why exactly 50 minutes between items?">
+          <p className="mb-2">Solid food takes 45–60 minutes to leave the stomach. Eating again before the previous item has cleared means the two compete for gut space and blood flow — a common cause of cramping and nausea at race intensity.</p>
+          <p>The 50-minute gap is the practical minimum that keeps the gut clear. It is a fixed rule, not a function of ride length or carb target.</p>
+        </Accordion>
+        <Accordion title="Why stop eating 20 minutes before the finish?">
+          <p>Solid food needs to be in your gut long enough to be digested and absorbed. An item eaten in the final 20 minutes will still be sitting in your stomach at the finish line — it contributes nothing to your energy and adds unnecessary digestive load during the hardest part of the effort.</p>
+        </Accordion>
+        <Accordion title="How many food items will CycleFuel schedule?">
+          <p className="mb-2">The app calculates the <strong>feed window</strong> — the time between the first food item and the last allowed checkpoint (20 min before finish). It then divides that window by 50 minutes:</p>
+          <p className="font-mono bg-muted rounded px-2 py-1 text-xs mb-2">maxItems = floor(feedWindowMinutes ÷ 50)</p>
+          <p>Items are scheduled at fixed 50-minute intervals starting from the first food checkpoint. If you&apos;ve selected more food items than fit in the window, the extras are dropped.</p>
+        </Accordion>
+        <Accordion title="How is the carb split decided between drinks and food?">
+          <p className="mb-2">CycleFuel fills carbs in this order:</p>
+          <ol className="list-decimal list-inside space-y-1 mb-2">
+            <li>Drinks are distributed across all scheduled sip checkpoints first — they deliver the bulk of your carbs reliably and without GI risk.</li>
+            <li>Any remaining carb gap (target minus drink carbs) is filled by solid food items, up to the number that fit in the feed window.</li>
+          </ol>
+          <p>This order reflects best practice: liquids are easier to absorb under effort, so you maximise drink carbs before leaning on solid food.</p>
         </Accordion>
       </Section>
 
