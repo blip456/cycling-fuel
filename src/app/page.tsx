@@ -151,6 +151,18 @@ export default function HomePage() {
   return (
     <div className="px-4 pt-12 pb-nav">
       <div className="mb-6">
+        {/* Brand lockup */}
+        <div className="flex items-center gap-3 mb-5">
+          <img
+            src="/icons/icon.svg"
+            alt="CycleFuel"
+            className="h-11 w-11 rounded-2xl shadow-sm"
+            aria-hidden="true"
+          />
+          <span className="text-[11px] font-bold tracking-[0.18em] uppercase text-primary select-none">
+            CycleFuel
+          </span>
+        </div>
         <p className="text-sm text-muted-foreground font-medium">{getGreeting()}</p>
         <h1 className="text-2xl font-bold text-foreground mt-0.5">
           Ready to fuel your ride?
