@@ -711,6 +711,23 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Help */}
+      <section className="mb-7">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+          Help
+        </h2>
+        <a
+          href="/help"
+          className="flex items-center justify-between bg-card rounded-2xl border border-border px-4 py-3.5 hover:bg-muted transition-colors"
+        >
+          <div>
+            <p className="text-sm font-medium text-foreground">How CycleFuel works</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Science, formulas &amp; feature guide</p>
+          </div>
+          <svg className="h-4 w-4 text-muted-foreground shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+        </a>
+      </section>
+
       {/* Data Management */}
       <section className="mb-7">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">

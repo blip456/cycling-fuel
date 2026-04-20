@@ -380,7 +380,7 @@ export default function PlanResultPage() {
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Tonight: Prep Your Bottles
+              🍼 Prep Your Bottles
             </h2>
             {editMode && (
               <span className="text-xs text-primary font-medium bg-sage-light px-2 py-1 rounded-lg">
@@ -490,7 +490,7 @@ export default function PlanResultPage() {
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              On the Bike
+              🍌 On the Bike
             </h2>
             {editMode && (
               <span className="text-xs text-primary font-medium bg-sage-light px-2 py-1 rounded-lg">
