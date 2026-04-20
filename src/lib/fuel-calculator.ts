@@ -109,7 +109,8 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   // Feed window starts at 30-45 min (body needs warmup) and ends 20 min before finish.
   const foodCarbsGap = Math.max(0, totalCarbs - fullRideDrinkCarbs);
 
-  const feedStartMin = durationMin <= 90 ? 30 : Math.min(45, Math.round(durationMin * 0.15));
+  // FIX 1: feedStartMin must be at least 30 min — body needs warmup before solid food
+  const feedStartMin = Math.max(30, Math.min(45, Math.round(durationMin * 0.15)));
   const feedEndMin = Math.max(feedStartMin + 1, durationMin - 20);
   const feedWindowMin = feedEndMin - feedStartMin;
 
@@ -124,13 +125,10 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     foodItemCount = Math.min(itemsNeededForGap, maxFoodItems);
   }
 
-  // Distribute food event times evenly within the feed window
+  // FIX 2: fixed 50-min steps guarantee exactly 50 min between items (not proportional)
   const foodEventTimes: number[] = [];
-  if (foodItemCount > 0) {
-    const spacing = feedWindowMin / (foodItemCount + 1);
-    for (let i = 1; i <= foodItemCount; i++) {
-      foodEventTimes.push(Math.round(feedStartMin + spacing * i));
-    }
+  for (let i = 1; i <= foodItemCount; i++) {
+    foodEventTimes.push(feedStartMin + i * 50);
   }
 
   // --- Build feeding schedule ---
@@ -179,6 +177,11 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     const totalSips = Math.round(totalBottleMl / SIP_ML);
     const sipsPerBottle = bottlePrep.map((b) => Math.round(b.mlCapacity / SIP_ML));
     const remainingBottleSips = [...sipsPerBottle];
+    // FIX 3: running-total carb tracking per bottle eliminates per-sip rounding drift.
+    // carbsAssigned[i] tracks how many grams have been attributed to bottle i so far.
+    // Each chunk's carbs = round(sipsAfter/totalSips × carbsTotal) - carbsAssigned[i]
+    // so the last chunk always brings the bottle's total to exactly carbsTotal.
+    const carbsAssigned = new Array(bottlePrep.length).fill(0);
     let currentBottleIdx = 0;
     let cumulativeSipsAssigned = 0;
 
@@ -207,12 +210,18 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       while (sipsLeft > 0 && currentBottleIdx < bottlePrep.length) {
         const fromThisBottle = Math.min(sipsLeft, remainingBottleSips[currentBottleIdx]);
         if (fromThisBottle > 0) {
-          const b = bottlePrep[currentBottleIdx];
-          intervalCarbs +=
-            sipsPerBottle[currentBottleIdx] > 0
-              ? Math.round((fromThisBottle * b.carbsTotal) / sipsPerBottle[currentBottleIdx])
+          const bi = currentBottleIdx;
+          const b = bottlePrep[bi];
+          const sipsDrunkBefore = sipsPerBottle[bi] - remainingBottleSips[bi];
+          const sipsDrunkAfter = sipsDrunkBefore + fromThisBottle;
+          const targetCarbsAfter =
+            sipsPerBottle[bi] > 0
+              ? Math.round((sipsDrunkAfter / sipsPerBottle[bi]) * b.carbsTotal)
               : 0;
-          remainingBottleSips[currentBottleIdx] -= fromThisBottle;
+          const chunkCarbs = targetCarbsAfter - carbsAssigned[bi];
+          carbsAssigned[bi] = targetCarbsAfter;
+          intervalCarbs += chunkCarbs;
+          remainingBottleSips[bi] -= fromThisBottle;
           sipsLeft -= fromThisBottle;
         }
         if (remainingBottleSips[currentBottleIdx] <= 0 && currentBottleIdx < bottlePrep.length - 1) {
