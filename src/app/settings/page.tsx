@@ -834,16 +834,24 @@ export default function SettingsPage() {
       />
 
       {/* Version footer */}
-      <div className="text-center pt-2 pb-4">
-        <p className="text-sm text-muted-foreground">
-          {new Date(process.env.NEXT_PUBLIC_BUILD_DATE ?? Date.now()).toLocaleDateString("en-GB", {
-            day: "numeric", month: "long", year: "numeric",
-          })}
-        </p>
-        <p className="text-xs text-muted-foreground/50 mt-0.5">
-          v{pkg.version} · {process.env.NEXT_PUBLIC_BUILD_ID ?? "dev"}
-        </p>
-      </div>
+      {(() => {
+        const deployId =
+          process.env.NEXT_PUBLIC_VERCEL_DEPLOYMENT_ID ??
+          process.env.NEXT_PUBLIC_BUILD_ID ??
+          "dev";
+        return (
+          <div className="text-center pt-2 pb-4">
+            <p className="text-sm text-muted-foreground">
+              {new Date(process.env.NEXT_PUBLIC_BUILD_DATE ?? Date.now()).toLocaleDateString("en-GB", {
+                day: "numeric", month: "long", year: "numeric",
+              })}
+            </p>
+            <p className="text-xs text-muted-foreground/50 mt-0.5">
+              v{pkg.version} · {deployId}
+            </p>
+          </div>
+        );
+      })()}
     </div>
   );
 }
