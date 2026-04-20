@@ -2,8 +2,6 @@
 
 import { useState, useRef } from "react";
 import { Plus, Minus, Pencil, Trash2, Check, Download, Upload, AlertTriangle } from "lucide-react";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pkg = require("../../package.json") as { version: string };
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -847,7 +845,7 @@ export default function SettingsPage() {
               })}
             </p>
             <p className="text-xs text-muted-foreground/50 mt-0.5">
-              v{pkg.version} · {deployId}
+              v{process.env.NEXT_PUBLIC_APP_VERSION ?? "1.0.0"} · {deployId}
             </p>
           </div>
         );
