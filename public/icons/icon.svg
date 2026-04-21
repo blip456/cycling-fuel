@@ -1,67 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <defs>
-    <!-- Rich sage gradient: lighter top-left → deeper bottom-right -->
-    <linearGradient id="bg" x1="0" y1="0" x2="192" y2="192" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#80AD8D"/>
-      <stop offset="100%" stop-color="#4F8462"/>
-    </linearGradient>
-    <!-- Warm glow behind the drop -->
-    <filter id="dropGlow" x="-40%" y="-40%" width="180%" height="180%">
-      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#E0501C" flood-opacity="0.45"/>
-    </filter>
-    <!-- Rim sheen filter -->
-    <filter id="rimSheen">
-      <feGaussianBlur stdDeviation="1.5" result="blur"/>
-      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-    </filter>
-  </defs>
+  <!-- Sage green background -->
+  <rect width="192" height="192" rx="44" fill="#6B9E7B"/>
 
-  <!-- ── Background ── -->
-  <rect width="192" height="192" rx="44" fill="url(#bg)"/>
-  <!-- Top-left ambient highlight -->
-  <ellipse cx="52" cy="44" rx="90" ry="75" fill="rgba(255,255,255,0.07)"/>
+  <!-- Ambient top-left highlight for depth -->
+  <ellipse cx="52" cy="44" rx="90" ry="75" fill="rgba(255,255,255,0.06)"/>
 
-  <!-- ── Wheel rim ── -->
-  <!-- Main rim ring -->
-  <circle cx="96" cy="96" r="72" fill="none" stroke="white" stroke-width="7.5" stroke-opacity="0.90"/>
-  <!-- Inner rim lip (subtle second ring — real wheels have this) -->
-  <circle cx="96" cy="96" r="64" fill="none" stroke="white" stroke-width="1.5" stroke-opacity="0.16"/>
-  <!-- Metallic sheen arc: top-right quadrant brighter -->
-  <path d="M146 46 A72 72 0 0 1 168 96"
-        fill="none" stroke="white" stroke-width="7.5" stroke-linecap="round" stroke-opacity="0.32"/>
+  <!-- Flame body — filled white, slightly off-opaque so the green breathes through -->
+  <path d="M96 34
+           C109 52 130 76 130 106
+           C130 128 122 146 112 155
+           C108 159 104 162 96 162
+           C88 162 84 159 80 155
+           C70 146 62 128 62 106
+           C62 76 83 52 96 34
+           Z"
+        fill="#FAFAF7" opacity="0.95"/>
 
-  <!-- ── 3 aero spokes in Y formation (drawn behind the drop) ── -->
-  <!-- Top spoke  (12 o'clock → center) -->
-  <line x1="96"  y1="24"  x2="96" y2="96" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-opacity="0.78"/>
-  <!-- Lower-right spoke (≈ 4 o'clock → center) -->
-  <line x1="158" y1="132" x2="96" y2="96" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-opacity="0.78"/>
-  <!-- Lower-left spoke  (≈ 8 o'clock → center) -->
-  <line x1="34"  y1="132" x2="96" y2="96" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-opacity="0.78"/>
-
-  <!-- Spoke nipple accents where spokes meet the rim -->
-  <circle cx="96"  cy="24"  r="5.5" fill="rgba(255,255,255,0.42)"/>
-  <circle cx="158" cy="132" r="5.5" fill="rgba(255,255,255,0.42)"/>
-  <circle cx="34"  cy="132" r="5.5" fill="rgba(255,255,255,0.42)"/>
-
-  <!-- ── Fuel drop hub — the hero element ──
-       Upward-pointing teardrop: tip at (96,50), widest 56 px at y≈94, base at (96,116)
-       Pointing UP subverts gravity → energy ascending, fuel being consumed as power  -->
-  <path d="M96 50
-           C87 59 67 76 67 94
-           C67 106 80.5 116 96 116
-           C111.5 116 125 106 125 94
-           C125 76 105 59 96 50 Z"
-        fill="#F08060"
-        filter="url(#dropGlow)"/>
-
-  <!-- Glossy highlight (top-left facet of the drop) -->
-  <ellipse cx="83" cy="67" rx="6" ry="10"
-           fill="rgba(255,255,255,0.30)"
-           transform="rotate(-22 83 67)"/>
-
-  <!-- Tiny specular dot at tip — like a light source reflection -->
-  <circle cx="93" cy="55" r="3" fill="rgba(255,255,255,0.22)"/>
-
-  <!-- White axle center dot -->
-  <circle cx="96" cy="95" r="5.5" fill="white" opacity="0.92"/>
+  <!-- Inner warm core — peach teardrop sitting inside the flame -->
+  <path d="M96 96
+           C90 114 84 132 87 148
+           C89 156 93 161 96 162
+           C99 161 103 156 105 148
+           C108 132 102 114 96 96
+           Z"
+        fill="#F08060" opacity="0.50"/>
 </svg>
