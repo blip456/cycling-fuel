@@ -9,9 +9,12 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
-import { formatDuration, formatTime } from "@/lib/utils";
+import { formatDuration, formatTime, generateId } from "@/lib/utils";
+import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { generateInsights, type PlanInsight } from "@/lib/plan-insights";
-import type { FuelPlan, ScheduleItem, BottlePrep, WeatherData } from "@/lib/types";
+import type { FuelPlan, ScheduleItem, BottlePrep, WeatherData, Bottle } from "@/lib/types";
+
+const CARB_OPTIONS = [45, 60, 90, 120] as const;
 
 function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className?: string }) {
   const cls = className ?? "h-5 w-5";
@@ -69,7 +72,7 @@ type EditItem = {
 export default function PlanResultPage() {
   const params = useParams();
   const router = useRouter();
-  const { getPlan, savePlan, deletePlan, foods, drinks } = useStore();
+  const { getPlan, savePlan, deletePlan, foods, drinks, profile } = useStore();
   const [plan, setPlan] = useState<FuelPlan | null>(null);
 
   const [editMode, setEditMode] = useState(false);
@@ -80,6 +83,8 @@ export default function PlanResultPage() {
   const [editBottles, setEditBottles] = useState<EditBottle[]>([]);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [openPickerIdx, setOpenPickerIdx] = useState<number | null>(null);
+  const [editCarbsPerHour, setEditCarbsPerHour] = useState<45 | 60 | 90 | 120>(90);
+  const [editPlanBottles, setEditPlanBottles] = useState<Bottle[]>([]);
 
   useEffect(() => {
     const found = getPlan(params.id as string);
@@ -151,6 +156,8 @@ export default function PlanResultPage() {
 
   function enterEditMode() {
     if (!plan?.result) return;
+    setEditCarbsPerHour(plan.carbsPerHour);
+    setEditPlanBottles([...plan.bottles]);
     setEditBottles(
       plan.result.bottlePrep.map((b) => ({
         bottleId: b.bottleId,
@@ -203,15 +210,33 @@ export default function PlanResultPage() {
 
   function saveChanges() {
     if (!plan || !plan.result) return;
-    const updatedPlan: FuelPlan = {
-      ...plan,
-      result: {
-        ...plan.result,
-        bottlePrep: liveBottles,
-        schedule: liveSchedule,
-        totalCarbs: liveTotalCarbs,
-      },
-    };
+    const carbsChanged = editCarbsPerHour !== plan.carbsPerHour;
+    const bottlesChanged =
+      editPlanBottles.length !== plan.bottles.length ||
+      editPlanBottles.some((b, i) => b.mlCapacity !== plan.bottles[i]?.mlCapacity);
+
+    let updatedPlan: FuelPlan;
+    if (carbsChanged || bottlesChanged) {
+      const newResult = calculateFuelPlan({
+        distance: plan.distance,
+        avgSpeed: plan.avgSpeed,
+        carbsPerHour: editCarbsPerHour,
+        bottles: editPlanBottles,
+        includeSolidFood: plan.includeSolidFood,
+        selectedDrinks: plan.selectedDrinks,
+        selectedFoods: plan.selectedFoods,
+        drinks,
+        foods,
+        weather: plan.weather,
+        weightKg: profile.weightKg,
+      });
+      updatedPlan = { ...plan, carbsPerHour: editCarbsPerHour, bottles: editPlanBottles, result: newResult };
+    } else {
+      updatedPlan = {
+        ...plan,
+        result: { ...plan.result, bottlePrep: liveBottles, schedule: liveSchedule, totalCarbs: liveTotalCarbs },
+      };
+    }
     savePlan(updatedPlan);
     setPlan(updatedPlan);
     setEditMode(false);
@@ -239,11 +264,18 @@ export default function PlanResultPage() {
   const displayTotalCarbs = editMode ? liveTotalCarbs : viewTotalCarbs;
   const fluidPerHour = Math.round(result.totalFluidMl / result.durationHours);
   const targetFluidMl = result.totalFluidMl;
-  const actualFluidMl = result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
+  const actualFluidMl = editMode
+    ? editPlanBottles.reduce((sum, b) => sum + b.mlCapacity, 0)
+    : result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
   const fluidDiffMl = actualFluidMl - targetFluidMl;
-  // Target is always duration × carbs/hr — stable even after edits
-  const targetCarbs = Math.round(result.durationHours * plan.carbsPerHour);
+  const displayCarbsPerHour = editMode ? editCarbsPerHour : plan.carbsPerHour;
+  const targetCarbs = Math.round(result.durationHours * displayCarbsPerHour);
   const carbsDiff = displayTotalCarbs - targetCarbs;
+  const structuralChanges = editMode && (
+    editCarbsPerHour !== plan.carbsPerHour ||
+    editPlanBottles.length !== plan.bottles.length ||
+    editPlanBottles.some((b, i) => b.mlCapacity !== plan.bottles[i]?.mlCapacity)
+  );
 
   return (
     <div className="min-h-dvh bg-background pb-nav">
@@ -335,7 +367,7 @@ export default function PlanResultPage() {
                 <Flame className="h-3.5 w-3.5" />
                 <span className="text-xs">Target/hr</span>
               </div>
-              <p className="font-bold">{plan.carbsPerHour}g</p>
+              <p className="font-bold transition-all duration-150">{displayCarbsPerHour}g</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-primary-foreground/70 mb-0.5">
@@ -400,6 +432,109 @@ export default function PlanResultPage() {
             </div>
           );
         })()}
+
+        {/* Edit: Ride Setup — carb target + bottle sizes */}
+        {editMode && (
+          <section>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Ride Setup
+            </h2>
+            <div className="rounded-2xl border border-primary/40 bg-card p-4 flex flex-col gap-5">
+              {/* Carb target */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
+                  Carbs per hour
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {CARB_OPTIONS.map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => setEditCarbsPerHour(opt)}
+                      className={`py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-150 ${
+                        editCarbsPerHour === opt
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background text-foreground border-border hover:border-primary/50"
+                      }`}
+                    >
+                      {opt}g
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bottle sizes */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
+                  Bottles
+                </p>
+                <div className="flex flex-col gap-2">
+                  {editPlanBottles.map((bottle, i) => (
+                    <div key={bottle.id} className="flex items-center gap-3 bg-background rounded-xl border border-border px-3 py-2">
+                      <span className="text-xs text-muted-foreground font-medium w-14 shrink-0">
+                        Bottle {i + 1}
+                      </span>
+                      <div className="flex-1 flex gap-1">
+                        {([500, 750, 1000] as const).map((ml) => (
+                          <button
+                            key={ml}
+                            onClick={() =>
+                              setEditPlanBottles((prev) =>
+                                prev.map((b) => b.id === bottle.id ? { ...b, mlCapacity: ml } : b)
+                              )
+                            }
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                              bottle.mlCapacity === ml
+                                ? "bg-primary text-white border-primary"
+                                : "bg-card text-muted-foreground border-border hover:border-primary/40"
+                            }`}
+                          >
+                            {ml}ml
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() =>
+                          editPlanBottles.length > 1 &&
+                          setEditPlanBottles((prev) => prev.filter((b) => b.id !== bottle.id))
+                        }
+                        disabled={editPlanBottles.length <= 1}
+                        className={`p-1 rounded-lg transition-colors shrink-0 ${
+                          editPlanBottles.length > 1
+                            ? "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            : "invisible"
+                        }`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() =>
+                      setEditPlanBottles((prev) => [
+                        ...prev,
+                        { id: generateId(), mlCapacity: 500 },
+                      ])
+                    }
+                    className="flex items-center justify-center gap-2 py-2 rounded-xl border-2 border-dashed border-border text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Bottle
+                  </button>
+                </div>
+              </div>
+
+              {/* Recalculate notice */}
+              {structuralChanges && (
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/10 rounded-xl border border-primary/20">
+                  <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <p className="text-xs font-medium text-primary">
+                    Schedule will be fully recalculated when you save
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Bottle prep */}
         <section>
