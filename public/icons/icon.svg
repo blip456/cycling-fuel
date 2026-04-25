@@ -1,27 +1,56 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <!-- Sage green background -->
-  <rect width="192" height="192" rx="44" fill="#6B9E7B"/>
+  <!-- Solid sage green background — square, platform handles rounding -->
+  <rect width="192" height="192" fill="#6B9E7B"/>
 
-  <!-- Ambient top-left highlight for depth -->
-  <ellipse cx="52" cy="44" rx="90" ry="75" fill="rgba(255,255,255,0.06)"/>
+  <!-- Bottle drawn upright, rotated -38° around canvas centre -->
+  <g transform="rotate(-38 96 96)"
+     fill="none"
+     stroke="white"
+     stroke-width="7"
+     stroke-linecap="round"
+     stroke-linejoin="round">
 
-  <!-- Flame body — filled white, slightly off-opaque so the green breathes through -->
-  <path d="M96 34
-           C109 52 130 76 130 106
-           C130 128 122 146 112 155
-           C108 159 104 162 96 162
-           C88 162 84 159 80 155
-           C70 146 62 128 62 106
-           C62 76 83 52 96 34
-           Z"
-        fill="#FAFAF7" opacity="0.95"/>
+    <!--
+      Full bottle silhouette — single closed path, clockwise:
+        nozzle tip → right tab → right shoulder → right body →
+        rounded bottom → left body → left shoulder → left tab → close
+    -->
+    <path d="
+      M89 22  Q96 17 103 22
+      L103 39  L116 39  L116 57
+      Q120 65 125 75
+      L125 163
+      Q96 180 67 163
+      L67 75
+      Q72 65 76 57
+      L76 39  L89 39
+      Z
+    "/>
 
-  <!-- Inner warm core — peach teardrop sitting inside the flame -->
-  <path d="M96 96
-           C90 114 84 132 87 148
-           C89 156 93 161 96 162
-           C99 161 103 156 105 148
-           C108 132 102 114 96 96
-           Z"
-        fill="#F08060" opacity="0.50"/>
+    <!-- Tab inner verticals — turn the cap rectangle into an H-slot -->
+    <line x1="89"  y1="39" x2="89"  y2="57"/>
+    <line x1="103" y1="39" x2="103" y2="57"/>
+
+    <!-- H cross-bar (finger-pull grip) -->
+    <line x1="76" y1="49" x2="116" y2="49"/>
+
+    <!-- Body ridge 1 — gentle outward arc (contour moulding) -->
+    <path d="M67 102 Q96 106 125 102"/>
+
+    <!-- Body ridge 2 -->
+    <path d="M67 117 Q96 121 125 117"/>
+
+    <!-- FUEL — bold, fills the lower body panel -->
+    <text
+      x="96" y="153"
+      font-family="'Arial Black', Impact, 'Helvetica Neue', Arial, sans-serif"
+      font-size="25"
+      font-weight="900"
+      text-anchor="middle"
+      fill="white"
+      stroke="none"
+      letter-spacing="3"
+    >FUEL</text>
+
+  </g>
 </svg>

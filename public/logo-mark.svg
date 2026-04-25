@@ -1,27 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Sage green background -->
-  <rect width="64" height="64" rx="14.5" fill="#6B9E7B"/>
+  <!-- Sage green background — square, platform handles rounding -->
+  <rect width="64" height="64" fill="#6B9E7B"/>
 
-  <!-- Ambient highlight -->
-  <ellipse cx="17" cy="15" rx="30" ry="25" fill="rgba(255,255,255,0.06)"/>
+  <!-- Bottle scaled to 64×64 (scale ≈ 0.333 of 192×192 icon) -->
+  <g transform="rotate(-38 32 32)"
+     fill="none"
+     stroke="white"
+     stroke-width="2.4"
+     stroke-linecap="round"
+     stroke-linejoin="round">
 
-  <!-- Flame body — filled warm white -->
-  <path d="M32 11
-           C36.3 17.3 43.3 25.3 43.3 35.3
-           C43.3 42.7 40.7 48.7 37.3 51.7
-           C36 53.3 34.7 54 32 54
-           C29.3 54 28 53.3 26.7 51.7
-           C23.3 48.7 20.7 42.7 20.7 35.3
-           C20.7 25.3 27.7 17.3 32 11
-           Z"
-        fill="#FAFAF7" opacity="0.95"/>
+    <!-- Full bottle silhouette (coordinates × 0.333) -->
+    <path d="
+      M29.7 7.3  Q32 5.7 34.3 7.3
+      L34.3 13  L38.7 13  L38.7 19
+      Q40 21.7 41.7 25
+      L41.7 54.3
+      Q32 60 22.3 54.3
+      L22.3 25
+      Q24 21.7 25.3 19
+      L25.3 13  L29.7 13
+      Z
+    "/>
 
-  <!-- Inner warm core — peach teardrop -->
-  <path d="M32 32
-           C30 38 28 44 29 49.3
-           C29.7 52 31 53.7 32 54
-           C33 53.7 34.3 52 35 49.3
-           C36 44 34 38 32 32
-           Z"
-        fill="#F08060" opacity="0.50"/>
+    <!-- H inner verticals -->
+    <line x1="29.7" y1="13" x2="29.7" y2="19"/>
+    <line x1="34.3" y1="13" x2="34.3" y2="19"/>
+
+    <!-- H cross-bar -->
+    <line x1="25.3" y1="16.3" x2="38.7" y2="16.3"/>
+
+    <!-- Body ridge 1 -->
+    <path d="M22.3 34 Q32 35.3 41.7 34"/>
+
+    <!-- Body ridge 2 -->
+    <path d="M22.3 39 Q32 40.3 41.7 39"/>
+
+    <!-- FUEL text -->
+    <text
+      x="32" y="51"
+      font-family="'Arial Black', Impact, 'Helvetica Neue', Arial, sans-serif"
+      font-size="8.5"
+      font-weight="900"
+      text-anchor="middle"
+      fill="white"
+      stroke="none"
+      letter-spacing="1"
+    >FUEL</text>
+
+  </g>
 </svg>
