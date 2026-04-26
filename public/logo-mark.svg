@@ -1,51 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Sage green background — square, platform handles rounding -->
-  <rect width="64" height="64" fill="#6B9E7B"/>
+  <!-- Dark forest-green background -->
+  <rect width="64" height="64" fill="#3B6B4A"/>
 
-  <!-- Bottle scaled to 64×64 (scale ≈ 0.333 of 192×192 icon) -->
+  <!-- Bottle scaled to 64×64 (÷3 of the 192 icon) -->
   <g transform="rotate(-38 32 32)"
      fill="none"
      stroke="white"
-     stroke-width="2.4"
+     stroke-width="2.7"
      stroke-linecap="round"
      stroke-linejoin="round">
 
-    <!-- Full bottle silhouette (coordinates × 0.333) -->
     <path d="
-      M29.7 7.3  Q32 5.7 34.3 7.3
-      L34.3 13  L38.7 13  L38.7 19
-      Q40 21.7 41.7 25
-      L41.7 54.3
-      Q32 60 22.3 54.3
-      L22.3 25
-      Q24 21.7 25.3 19
-      L25.3 13  L29.7 13
+      M29.3 6.7  Q32 5 34.7 6.7
+      L34.7 11.3
+      Q35.7 12 38.7 12.7  L38.7 18.7
+      Q40.7 22.7 42.7 26.7
+      Q44.7 30.7 42.7 33.3
+      L42.7 54
+      Q32 59.3 21.3 54
+      L21.3 33.3
+      Q19.3 30.7 21.3 26.7
+      Q23.3 22.7 25.3 18.7
+      L25.3 12.7  Q28.3 12 29.3 11.3
       Z
     "/>
 
-    <!-- H inner verticals -->
-    <line x1="29.7" y1="13" x2="29.7" y2="19"/>
-    <line x1="34.3" y1="13" x2="34.3" y2="19"/>
+    <line x1="29.3" y1="12.7" x2="29.3" y2="18.7"/>
+    <line x1="34.7" y1="12.7" x2="34.7" y2="18.7"/>
+    <line x1="25.3" y1="15.7" x2="38.7" y2="15.7"/>
 
-    <!-- H cross-bar -->
-    <line x1="25.3" y1="16.3" x2="38.7" y2="16.3"/>
-
-    <!-- Body ridge 1 -->
-    <path d="M22.3 34 Q32 35.3 41.7 34"/>
-
-    <!-- Body ridge 2 -->
-    <path d="M22.3 39 Q32 40.3 41.7 39"/>
-
-    <!-- FUEL text -->
     <text
-      x="32" y="51"
+      x="32" y="49.3"
       font-family="'Arial Black', Impact, 'Helvetica Neue', Arial, sans-serif"
-      font-size="8.5"
+      font-size="10"
       font-weight="900"
       text-anchor="middle"
       fill="white"
       stroke="none"
-      letter-spacing="1"
+      letter-spacing="0.7"
     >FUEL</text>
 
   </g>
