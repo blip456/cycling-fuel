@@ -5,13 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, Sun, Cloud, CloudRain, CloudLightning,
   Snowflake, Wind, Droplets, Flame, AlertTriangle, Bike, Coffee,
-  Pencil, X, Plus, Check, Trash2, Minus, Info,
+  Pencil, X, Plus, Check, Trash2, Minus, Info, Download,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration, formatTime, generateId } from "@/lib/utils";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { generateInsights, type PlanInsight } from "@/lib/plan-insights";
+import { generateGarminTCX } from "@/lib/export-garmin";
 import type { FuelPlan, ScheduleItem, BottlePrep, WeatherData, Bottle } from "@/lib/types";
 
 const CARB_OPTIONS = [45, 60, 90, 120] as const;
@@ -241,6 +242,18 @@ export default function PlanResultPage() {
     setPlan(updatedPlan);
     setEditMode(false);
     setOpenPickerIdx(null);
+  }
+
+  function handleGarminExport() {
+    if (!plan?.result) return;
+    const tcx = generateGarminTCX(plan);
+    const blob = new Blob([tcx], { type: "application/vnd.garmin.tcx+xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `fuel-plan-${plan.rideDate}.tcx`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   if (!plan || !plan.result) {
@@ -833,6 +846,22 @@ export default function PlanResultPage() {
           <ExternalLink className="h-4 w-4" />
           Open Minimal / Print View
         </button>
+
+        {/* Export to Garmin */}
+        {!editMode && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              onClick={handleGarminExport}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-dashed border-border text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Export to Garmin (.tcx)
+            </button>
+            <p className="text-xs text-center text-muted-foreground px-2">
+              Import in Garmin Connect → Training → Workouts → Import, then sync to your Edge
+            </p>
+          </div>
+        )}
 
         {/* Delete plan */}
         {!confirmDelete ? (
