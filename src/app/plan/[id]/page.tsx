@@ -13,9 +13,11 @@ import { formatDuration, formatTime, generateId } from "@/lib/utils";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { generateInsights, type PlanInsight } from "@/lib/plan-insights";
 import { generateGarminTCX } from "@/lib/export-garmin";
-import type { FuelPlan, ScheduleItem, BottlePrep, WeatherData, Bottle } from "@/lib/types";
-
-const CARB_OPTIONS = [45, 60, 90, 120] as const;
+import { CARB_RATE_OPTIONS } from "@/lib/types";
+import type {
+  FuelPlan, ScheduleItem, BottlePrep, WeatherData, Bottle,
+  CarbRate, RideFeedback, FeedbackFeel, GutFeel,
+} from "@/lib/types";
 
 function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className?: string }) {
   const cls = className ?? "h-5 w-5";
@@ -44,6 +46,167 @@ function InsightCard({ insight }: { insight: PlanInsight }) {
         <p className={`text-xs mt-0.5 leading-relaxed ${styles.body}`}>{insight.detail}</p>
       </div>
     </div>
+  );
+}
+
+const CARB_FEEL_LABELS: { value: FeedbackFeel; label: string }[] = [
+  { value: "too_little", label: "Too little" },
+  { value: "right", label: "Just right" },
+  { value: "too_much", label: "Too much" },
+];
+const GUT_FEEL_LABELS: { value: GutFeel; label: string }[] = [
+  { value: "fine", label: "Fine" },
+  { value: "uncomfortable", label: "A bit off" },
+  { value: "bad", label: "Bad" },
+];
+
+function feelLabel(value: string | undefined, options: { value: string; label: string }[]) {
+  return options.find((o) => o.value === value)?.label;
+}
+
+function SegmentedRow<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T | null;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground mb-1.5">{label}</p>
+      <div className="grid grid-cols-3 gap-1.5">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={`py-2 rounded-xl text-xs font-semibold border-2 transition-all duration-150 ${
+              value === opt.value
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background text-foreground border-border hover:border-primary/50"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeedbackSection({
+  plan,
+  onSave,
+}: {
+  plan: FuelPlan;
+  onSave: (fb: RideFeedback) => void;
+}) {
+  const existing = plan.feedback;
+  const [editing, setEditing] = useState(!existing);
+  const [carbFeel, setCarbFeel] = useState<FeedbackFeel | null>(existing?.carbFeel ?? null);
+  const [fluidFeel, setFluidFeel] = useState<FeedbackFeel | null>(existing?.fluidFeel ?? null);
+  const [gutFeel, setGutFeel] = useState<GutFeel | null>(existing?.gutFeel ?? null);
+  const [notes, setNotes] = useState(existing?.notes ?? "");
+
+  function handleSave() {
+    if (!carbFeel) return;
+    onSave({
+      recordedAt: new Date().toISOString(),
+      carbFeel,
+      fluidFeel: fluidFeel ?? undefined,
+      gutFeel: gutFeel ?? undefined,
+      notes: notes.trim() || undefined,
+    });
+    setEditing(false);
+  }
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        📝 How did it go?
+      </h2>
+
+      {!editing && existing ? (
+        <div className="bg-card border border-border rounded-2xl p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center rounded-full bg-sage-light text-primary text-xs font-medium px-2.5 py-1">
+                Carbs: {feelLabel(existing.carbFeel, CARB_FEEL_LABELS)}
+              </span>
+              {existing.fluidFeel && (
+                <span className="inline-flex items-center rounded-full bg-sky-50 text-sky-700 text-xs font-medium px-2.5 py-1">
+                  Fluid: {feelLabel(existing.fluidFeel, CARB_FEEL_LABELS)}
+                </span>
+              )}
+              {existing.gutFeel && (
+                <span className="inline-flex items-center rounded-full bg-peach-light text-accent text-xs font-medium px-2.5 py-1">
+                  Gut: {feelLabel(existing.gutFeel, GUT_FEEL_LABELS)}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setEditing(true)}
+              className="p-2 -m-1 rounded-xl hover:bg-muted transition-colors text-muted-foreground shrink-0"
+              title="Edit feedback"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {existing.notes && (
+            <p className="text-sm text-muted-foreground mt-2.5">{existing.notes}</p>
+          )}
+          <p className="text-xs text-muted-foreground/70 mt-2.5">
+            This feedback tunes the carb suggestions for your next rides.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-2xl p-4 flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground -mb-1">
+            Log how the fueling felt — future plans will adapt to what works for you.
+          </p>
+          <SegmentedRow
+            label={`Carbs (${plan.carbsPerHour}g/hr planned)`}
+            options={CARB_FEEL_LABELS}
+            value={carbFeel}
+            onChange={setCarbFeel}
+          />
+          <SegmentedRow
+            label="Fluid"
+            options={CARB_FEEL_LABELS}
+            value={fluidFeel}
+            onChange={setFluidFeel}
+          />
+          <SegmentedRow
+            label="Stomach / gut"
+            options={GUT_FEEL_LABELS}
+            value={gutFeel}
+            onChange={setGutFeel}
+          />
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1.5">Notes (optional)</p>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. banana at km 40 worked great, drink too sweet…"
+              rows={2}
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+            />
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={!carbFeel}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Check className="h-4 w-4" />
+            Save Feedback
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -84,7 +247,7 @@ export default function PlanResultPage() {
   const [editBottles, setEditBottles] = useState<EditBottle[]>([]);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [openPickerIdx, setOpenPickerIdx] = useState<number | null>(null);
-  const [editCarbsPerHour, setEditCarbsPerHour] = useState<45 | 60 | 90 | 120>(90);
+  const [editCarbsPerHour, setEditCarbsPerHour] = useState<CarbRate>(60);
   const [editPlanBottles, setEditPlanBottles] = useState<Bottle[]>([]);
 
   useEffect(() => {
@@ -149,11 +312,15 @@ export default function PlanResultPage() {
     });
   }, [editItems, liveBottles]);
 
-  const liveTotalCarbs = useMemo(() => {
-    const bottleCarbs = liveBottles.reduce((sum, b) => sum + b.carbsTotal, 0);
-    const foodCarbs = liveSchedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
-    return bottleCarbs + foodCarbs;
-  }, [liveBottles, liveSchedule]);
+  // What the schedule delivers: drink carbs consumed + food eaten
+  const liveTotalCarbs = useMemo(
+    () =>
+      liveSchedule.reduce(
+        (sum, s) => sum + (s.drink?.carbs ?? 0) + (s.food?.carbs ?? 0),
+        0
+      ),
+    [liveSchedule]
+  );
 
   function enterEditMode() {
     if (!plan?.result) return;
@@ -271,9 +438,10 @@ export default function PlanResultPage() {
   const weatherMeta = plan.weather ? getWeatherLabel(plan.weather.tempC) : null;
   const displayBottles = editMode ? liveBottles : result.bottlePrep;
   const displaySchedule = editMode ? liveSchedule : result.schedule;
-  const viewTotalCarbs =
-    result.bottlePrep.reduce((sum, b) => sum + b.carbsTotal, 0) +
-    result.schedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
+  const viewTotalCarbs = result.schedule.reduce(
+    (sum, s) => sum + (s.drink?.carbs ?? 0) + (s.food?.carbs ?? 0),
+    0
+  );
   const displayTotalCarbs = editMode ? liveTotalCarbs : viewTotalCarbs;
   const fluidPerHour = Math.round(result.totalFluidMl / result.durationHours);
   const targetFluidMl = result.totalFluidMl;
@@ -458,8 +626,8 @@ export default function PlanResultPage() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
                   Carbs per hour
                 </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {CARB_OPTIONS.map((opt) => (
+                <div className="grid grid-cols-5 gap-1.5">
+                  {CARB_RATE_OPTIONS.map((opt) => (
                     <button
                       key={opt}
                       onClick={() => setEditCarbsPerHour(opt)}
@@ -837,6 +1005,19 @@ export default function PlanResultPage() {
             })}
           </div>
         </section>
+
+        {/* Post-ride feedback — the learning loop */}
+        {!editMode && plan.rideDate <= format(new Date(), "yyyy-MM-dd") && (
+          <FeedbackSection
+            key={plan.feedback?.recordedAt ?? "new-feedback"}
+            plan={plan}
+            onSave={(fb) => {
+              const updated = { ...plan, feedback: fb };
+              savePlan(updated);
+              setPlan(updated);
+            }}
+          />
+        )}
 
         {/* Open minimal view */}
         <button

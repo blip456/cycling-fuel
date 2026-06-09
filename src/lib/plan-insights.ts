@@ -1,5 +1,6 @@
 import { formatDuration } from "./utils";
-import type { FuelPlan, CalculatedPlan } from "./types";
+import { CARB_RATE_OPTIONS } from "./types";
+import type { FuelPlan, CalculatedPlan, CarbRate, RideIntensity } from "./types";
 
 export type InsightLevel = "error" | "warning" | "suggestion";
 
@@ -10,19 +11,44 @@ export interface PlanInsight {
   detail: string;
 }
 
-export function recommendedCarbsPerHour(durationH: number): 45 | 60 | 90 | 120 {
-  if (durationH < 1) return 45;
-  if (durationH < 2) return 60;
-  if (durationH < 4) return 90;
-  return 120;
+export const INTENSITY_LABELS: Record<RideIntensity, string> = {
+  easy: "easy",
+  steady: "steady",
+  hard: "hard",
+};
+
+// Science baseline scaled by both duration AND intensity. Leisure riders burn
+// far fewer carbs/hr than racers; 90–120g/hr is only warranted at high effort.
+// 120g/hr is never auto-recommended — it requires deliberate gut training.
+export function recommendedCarbsPerHour(
+  durationH: number,
+  intensity: RideIntensity = "steady"
+): CarbRate {
+  switch (intensity) {
+    case "easy":
+      if (durationH < 1.5) return 30;
+      if (durationH < 3) return 45;
+      return 60;
+    case "steady":
+      if (durationH < 1) return 30;
+      if (durationH < 2) return 45;
+      if (durationH < 3) return 60;
+      return 90;
+    case "hard":
+      if (durationH < 1) return 45;
+      if (durationH < 2) return 60;
+      return 90;
+  }
 }
 
 // Feed window helpers (mirrors fuel-calculator logic)
 export function calcMaxFoodItems(durationH: number): number {
   const durationMin = durationH * 60;
   const feedStartMin = Math.max(30, Math.min(45, Math.round(durationMin * 0.15)));
-  const feedWindowMin = Math.max(0, durationMin - feedStartMin - 20);
-  return Math.floor(feedWindowMin / 50);
+  const feedWindowMin = durationMin - feedStartMin - 20;
+  if (feedWindowMin < 0) return 0;
+  // The slot at the window start counts too, hence +1
+  return Math.floor(feedWindowMin / 50) + 1;
 }
 
 export function generateInsights(
@@ -31,28 +57,46 @@ export function generateInsights(
 ): PlanInsight[] {
   const insights: PlanInsight[] = [];
   const durationH = result.durationHours;
+  const intensity = plan.intensity ?? "steady";
 
-  const actualCarbs =
-    result.bottlePrep.reduce((s, b) => s + b.carbsTotal, 0) +
-    result.schedule.reduce((s, i) => s + (i.food?.carbs ?? 0), 0);
+  // Carbs the schedule actually delivers (drinks consumed + food eaten)
+  const actualCarbs = result.schedule.reduce(
+    (s, i) => s + (i.drink?.carbs ?? 0) + (i.food?.carbs ?? 0),
+    0
+  );
   const targetCarbs = Math.round(durationH * plan.carbsPerHour);
 
   // ── 1. Carb target below science recommendation ──────────────────────
-  const minRec = recommendedCarbsPerHour(durationH);
-  if (plan.carbsPerHour < minRec) {
+  const rec = recommendedCarbsPerHour(durationH, intensity);
+  const stepDiff =
+    CARB_RATE_OPTIONS.indexOf(plan.carbsPerHour) - CARB_RATE_OPTIONS.indexOf(rec);
+  if (stepDiff < 0) {
     insights.push({
       id: "low-carbs",
       level: "suggestion",
-      title: `${minRec}g/hr recommended for ${formatDuration(durationH)}`,
+      title: `${rec}g/hr recommended for a ${INTENSITY_LABELS[intensity]} ${formatDuration(durationH)} ride`,
       detail:
-        `You've set ${plan.carbsPerHour}g/hr. Research consistently shows ${minRec}g/hr as the minimum for rides this long — below this, glycogen runs out before the finish and power drops sharply.`,
+        `You've set ${plan.carbsPerHour}g/hr. For this duration and effort, ${rec}g/hr keeps glycogen topped up so energy doesn't fade near the finish.`,
+    });
+  }
+
+  // ── 1b. Carb target well above what this ride needs ─────────────────
+  if (stepDiff >= 2) {
+    insights.push({
+      id: "high-carbs",
+      level: "suggestion",
+      title: `${plan.carbsPerHour}g/hr is likely more than this ride needs`,
+      detail:
+        `For a ${INTENSITY_LABELS[intensity]} ${formatDuration(durationH)} ride, ~${rec}g/hr is plenty. ` +
+        `Extra carbs cost money, add gut load, and won't make you faster at this effort.`,
     });
   }
 
   // ── 2. Significant carb shortfall (only when user has carb sources) ──
   const bottleCarbs = result.bottlePrep.reduce((s, b) => s + b.carbsTotal, 0);
   const carbShortfall = targetCarbs - actualCarbs;
-  if ((bottleCarbs > 0 || plan.selectedFoods.length > 0) &&
+  if (durationH >= 1 &&
+      (bottleCarbs > 0 || plan.selectedFoods.length > 0) &&
       carbShortfall > Math.max(15, targetCarbs * 0.15)) {
     insights.push({
       id: "carb-shortfall",

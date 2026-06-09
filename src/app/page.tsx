@@ -118,13 +118,24 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
             </div>
           </div>
           {plan.result && (
-            <div className="px-4 pb-3 flex items-center gap-3">
+            <div className="px-4 pb-3 flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center rounded-full bg-sage-light text-primary text-xs font-medium px-2.5 py-0.5">
                 {plan.result.totalCarbs}g carbs
               </span>
               <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5">
                 {Math.round(plan.result.totalFluidMl / 100) / 10}L fluid
               </span>
+              {plan.feedback ? (
+                <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5">
+                  ✓ feedback logged
+                </span>
+              ) : (
+                plan.rideDate <= format(new Date(), "yyyy-MM-dd") && (
+                  <span className="inline-flex items-center rounded-full bg-peach-light text-accent text-xs font-semibold px-2.5 py-0.5">
+                    Log how it went →
+                  </span>
+                )
+              )}
             </div>
           )}
         </Link>

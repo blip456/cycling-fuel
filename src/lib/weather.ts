@@ -45,7 +45,7 @@ export async function fetchWeather(
   lng: number,
   date: string
 ): Promise<WeatherData | null> {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&start_date=${date}&end_date=${date}`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,weathercode&timezone=auto&start_date=${date}&end_date=${date}`;
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -54,8 +54,13 @@ export async function fetchWeather(
 
     const tempMax = data.daily.temperature_2m_max[0];
     const tempMin = data.daily.temperature_2m_min[0];
+    const tempMean = data.daily.temperature_2m_mean?.[0];
     const code = data.daily.weathercode[0];
-    const tempC = Math.round((tempMax + tempMin) / 2);
+    // Rides happen in daytime — weight toward the daily max rather than the
+    // overnight minimum so hydration advice matches on-bike conditions.
+    const tempC = Math.round(
+      typeof tempMean === "number" ? (tempMean + tempMax) / 2 : (tempMax + tempMin) / 2
+    );
     const weatherInfo = WMO_CODES[code] ?? { description: "Mixed", icon: "cloud" as const };
 
     return {

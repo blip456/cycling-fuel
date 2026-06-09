@@ -1,5 +1,10 @@
 export type CarbRatio = "1:1" | "2:1" | "single";
 
+export type CarbRate = 30 | 45 | 60 | 90 | 120;
+export const CARB_RATE_OPTIONS: readonly CarbRate[] = [30, 45, 60, 90, 120];
+
+export type RideIntensity = "easy" | "steady" | "hard";
+
 export interface DrinkProduct {
   id: string;
   name: string;
@@ -26,8 +31,9 @@ export interface Bottle {
 
 export interface UserProfile {
   weightKg?: number;
-  defaultCarbsPerHour: 45 | 60 | 90 | 120;
+  defaultCarbsPerHour: CarbRate;
   defaultBottleMl: 500 | 750 | 1000;
+  defaultIntensity: RideIntensity;
 }
 
 export interface WeatherData {
@@ -39,6 +45,17 @@ export interface WeatherData {
 export interface SelectedDrink {
   productId: string;
   scoopsOverride?: number;
+}
+
+export type FeedbackFeel = "too_little" | "right" | "too_much";
+export type GutFeel = "fine" | "uncomfortable" | "bad";
+
+export interface RideFeedback {
+  recordedAt: string;
+  carbFeel: FeedbackFeel;
+  fluidFeel?: FeedbackFeel;
+  gutFeel?: GutFeel;
+  notes?: string;
 }
 
 export interface BottlePrep {
@@ -91,10 +108,12 @@ export interface FuelPlan {
   lat?: number;
   lng?: number;
   weather?: WeatherData;
-  carbsPerHour: 45 | 60 | 90 | 120;
+  carbsPerHour: CarbRate;
+  intensity?: RideIntensity;
   bottles: Bottle[];
   includeSolidFood: boolean;
   selectedDrinks: SelectedDrink[];
   selectedFoods: string[];
   result?: CalculatedPlan;
+  feedback?: RideFeedback;
 }
