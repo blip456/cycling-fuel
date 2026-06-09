@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, MapPin, Loader2, Plus, Minus, X, Check, AlertTriangle, Info } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Plus, Minus, X, Check, AlertTriangle, Info } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useStore } from "@/lib/store";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { geocodeLocation, fetchWeather } from "@/lib/weather";
+import { LocationAutocomplete, type VerifiedLocation } from "@/components/location-autocomplete";
 import { formatDuration, generateId } from "@/lib/utils";
 import { calcMaxFoodItems } from "@/lib/plan-insights";
 import { personalizedCarbTarget, fluidFeedbackHint } from "@/lib/personalization";
@@ -39,6 +40,7 @@ interface WizardData {
   avgSpeed: string;
   rideDate: string;
   location: string;
+  locationGeo: VerifiedLocation | null;
   intensity: RideIntensity;
   carbsPerHour: CarbRate;
   bottles: Bottle[];
@@ -73,6 +75,7 @@ export default function NewPlanPage() {
       avgSpeed: "",
       rideDate: today,
       location: "",
+      locationGeo: null,
       intensity: profile.defaultIntensity ?? "steady",
       carbsPerHour: profile.defaultCarbsPerHour,
       bottles: [{ id: generateId(), mlCapacity: profile.defaultBottleMl }],
@@ -165,7 +168,17 @@ export default function NewPlanPage() {
     let lng: number | undefined;
     let weather = undefined;
 
-    if (data.location.trim()) {
+    if (data.locationGeo) {
+      // User picked a verified suggestion — use its exact coordinates
+      lat = data.locationGeo.lat;
+      lng = data.locationGeo.lng;
+      try {
+        weather = await fetchWeather(lat, lng, data.rideDate) ?? undefined;
+      } catch {
+        // weather is optional; continue without it
+      }
+    } else if (data.location.trim()) {
+      // Free-typed text: best-effort geocode of the top match
       try {
         const geo = await geocodeLocation(data.location);
         if (geo) {
@@ -339,21 +352,30 @@ export default function NewPlanPage() {
                 Starting Location
                 <span className="text-muted-foreground font-normal ml-1">(optional, for weather)</span>
               </Label>
-              <div className="relative">
-                <Input
-                  id="location"
-                  type="text"
-                  placeholder="e.g. Ghent, Belgium"
-                  value={data.location}
-                  onChange={(e) => { update("location", e.target.value); setLocationError(""); }}
-                  className="pr-9"
-                />
-                <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              </div>
+              <LocationAutocomplete
+                id="location"
+                placeholder="e.g. Ghent, Belgium"
+                value={data.location}
+                verified={data.locationGeo}
+                onTextChange={(text) => {
+                  setData((d) => ({
+                    ...d,
+                    location: text,
+                    // typing invalidates a previous selection
+                    locationGeo: d.locationGeo && d.locationGeo.label === text ? d.locationGeo : null,
+                  }));
+                  setLocationError("");
+                }}
+                onSelect={(loc) =>
+                  setData((d) => ({ ...d, location: loc.label, locationGeo: loc }))
+                }
+              />
               {locationError && <p className="text-xs text-destructive mt-1">{locationError}</p>}
-              <p className="text-xs text-muted-foreground mt-1.5">
-                We&apos;ll fetch the forecast for this location and date.
-              </p>
+              {!data.location.trim() && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  We&apos;ll fetch the forecast for this location and date.
+                </p>
+              )}
             </div>
           </div>
         )}

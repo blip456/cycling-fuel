@@ -1,19 +1,39 @@
 import type { WeatherData } from "./types";
 
-interface GeoResult {
+export interface GeoResult {
+  id?: number;
   name: string;
   latitude: number;
   longitude: number;
-  country: string;
+  country?: string;
+  admin1?: string; // region / state / province
+}
+
+export function formatGeoLabel(g: GeoResult): string {
+  return [g.name, g.admin1, g.country].filter(Boolean).join(", ");
+}
+
+export async function searchLocations(
+  query: string,
+  count = 5,
+  signal?: AbortSignal
+): Promise<GeoResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=${count}&language=en&format=json`;
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results as GeoResult[]) ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function geocodeLocation(query: string): Promise<GeoResult | null> {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data.results?.length) return null;
-  return data.results[0];
+  const results = await searchLocations(query, 1);
+  return results[0] ?? null;
 }
 
 const WMO_CODES: Record<number, { description: string; icon: WeatherData["icon"] }> = {
