@@ -120,21 +120,35 @@ export function generateInsights(
     });
   }
 
-  // ── 4. More food selected than schedule can fit ──────────────────────
+  // ── 4. More food selected than the schedule includes ─────────────────
   if (plan.includeSolidFood) {
     const scheduledFoodCount = result.schedule.filter((s) => s.food).length;
     const selectedFoodCount = plan.selectedFoods.length;
     const dropped = selectedFoodCount - scheduledFoodCount;
     if (dropped > 0) {
-      insights.push({
-        id: "food-dropped",
-        level: "warning",
-        title: `${dropped} food item${dropped > 1 ? "s" : ""} dropped from schedule`,
-        detail:
-          `The 50-min spacing rule and 20-min pre-finish cutoff only allow ${scheduledFoodCount} ` +
-          `item${scheduledFoodCount !== 1 ? "s" : ""} in this ride's feed window. ` +
-          `${dropped > 1 ? `${dropped} items were` : "1 item was"} silently dropped.`,
-      });
+      const maxItems = calcMaxFoodItems(durationH);
+      if (scheduledFoodCount >= maxItems) {
+        // Genuinely limited by the feed window
+        insights.push({
+          id: "food-dropped",
+          level: "warning",
+          title: `${dropped} food item${dropped > 1 ? "s" : ""} don't fit the feed window`,
+          detail:
+            `The 50-min spacing rule and 20-min pre-finish cutoff only allow ${maxItems} ` +
+            `item${maxItems !== 1 ? "s" : ""} on this ride. The rest of your selection stays in your pocket as backup.`,
+        });
+      } else {
+        // Window has room — drinks already cover the target
+        insights.push({
+          id: "food-not-needed",
+          level: "suggestion",
+          title: `Only ${scheduledFoodCount} of ${selectedFoodCount} food item${selectedFoodCount !== 1 ? "s" : ""} scheduled`,
+          detail:
+            `Your drinks already deliver most of the ${plan.carbsPerHour}g/hr target, so the remaining ` +
+            `item${dropped !== 1 ? "s" : ""} ${dropped !== 1 ? "aren't" : "isn't"} needed. ` +
+            `Want more solid food? Lower the scoops per bottle and the schedule will lean on food instead.`,
+        });
+      }
     }
   }
 

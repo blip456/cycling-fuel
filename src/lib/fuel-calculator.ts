@@ -98,17 +98,17 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     };
   });
 
-  // --- Full-ride drink carbs (accounts for bottle refills) ---
-  // On rides longer than your bottle capacity, you refill at feed zones.
-  // Scale initial bottle carbs by how many sets of bottles are consumed —
-  // but only credit refill carbs when a refill is actually advised
-  // (bottleSets > 1.5, matching the refill warning below). Otherwise solid
-  // food must cover the gap.
+  // --- Drink carbs the ride will actually deliver ---
+  // Only the bottles you mix tonight count. On rides needing refills, assume
+  // refills are WATER (that's what feed zones reliably offer) — solid food
+  // must cover the remaining carbs. Crediting phantom refill mix here used to
+  // silently displace all food on long rides.
   const initialBottleMl = bottles.reduce((sum, b) => sum + b.mlCapacity, 0);
   const initialDrinkCarbs = bottlePrep.reduce((sum, b) => sum + b.carbsTotal, 0);
   const bottleSets = initialBottleMl > 0 ? totalFluidMl / initialBottleMl : 1;
-  const effectiveBottleSets = bottleSets > 1.5 ? bottleSets : Math.min(bottleSets, 1);
-  const fullRideDrinkCarbs = Math.round(initialDrinkCarbs * effectiveBottleSets);
+  // If bottles hold more than the ride needs, only the consumed share counts
+  const consumedShare = Math.min(bottleSets, 1);
+  const fullRideDrinkCarbs = Math.round(initialDrinkCarbs * consumedShare);
 
   // --- Solid food: fills only the remaining carb gap ---
   // Science: solid food every ~50 min is realistic. More frequent causes GI stress.
@@ -315,7 +315,7 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   if (bottleSets > 1.5) {
     const refills = Math.ceil(bottleSets) - 1;
     warnings.push(
-      `This ride requires ~${refills} bottle refill${refills > 1 ? "s" : ""}. Plan for a feed zone or carry extra nutrition.`
+      `This ride requires ~${refills} bottle refill${refills > 1 ? "s" : ""}. The plan assumes refills are water — carry extra powder if you want carbs in them.`
     );
   }
   const leftoverMl = initialBottleMl - totalFluidMl;
