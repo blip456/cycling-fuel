@@ -83,11 +83,15 @@ export default function HelpPage() {
       <Section emoji="🔥" title="Carb targets per hour">
         <Card>
           <div className="divide-y divide-border">
-            <Stat label="45 g/hr" value="Short rides &lt; 1 h" />
-            <Stat label="60 g/hr" value="1–2 h, single carb source" />
-            <Stat label="90 g/hr" value="2–4 h, mixed carb sources" />
-            <Stat label="120 g/hr" value="4 h+, gut-trained athletes" />
+            <Stat label="30 g/hr" value="Easy / leisure pace" />
+            <Stat label="45 g/hr" value="Easy long or steady short rides" />
+            <Stat label="60 g/hr" value="Steady 2–3 h, single carb source" />
+            <Stat label="90 g/hr" value="Hard or 3 h+ rides, mixed carbs" />
+            <Stat label="120 g/hr" value="Racing, gut-trained athletes" />
           </div>
+        </Card>
+        <Card>
+          <p className="text-muted-foreground">Recommendations scale with <span className="text-foreground font-medium">both duration and effort</span>. A 3-hour leisure ride burns far fewer carbs than a 3-hour race — pick your ride effort (Easy / Steady / Hard) in step 1 and CycleFuel adjusts the suggestion. 120 g/hr is never auto-recommended; it&apos;s an opt-in for gut-trained racers.</p>
         </Card>
         <Accordion title="Why does the limit change?">
           <p className="mb-2">Your gut absorbs carbohydrates through transporters in the small intestine. Glucose uses the SGLT1 transporter — it saturates at around <strong>60 g/hr</strong>. Beyond that, extra glucose simply isn&apos;t absorbed and causes stomach distress.</p>
@@ -126,7 +130,11 @@ export default function HelpPage() {
         </Card>
         <Accordion title="Why sips and not millilitres?">
           <p className="mb-2">A normal mouthful from a cycling bottle is approximately <strong>50 ml</strong>. Using sips avoids false precision — you can&apos;t measure 161 ml on the bike, but you can count to 3.</p>
-          <p>The total sips are spread evenly across all intervals using cumulative rounding, so every drop in every bottle is accounted for. When a bottle runs out mid-interval you&apos;ll see a <span className="text-amber-600 font-medium">finish → next bottle</span> note.</p>
+          <p>The sips are spread evenly across all intervals using cumulative rounding. When a bottle runs out mid-interval you&apos;ll see a <span className="text-amber-600 font-medium">finish → next bottle</span> note.</p>
+        </Accordion>
+        <Accordion title="What if I carry more fluid than I need?">
+          <p className="mb-2">The schedule paces you to the <strong>weather-based fluid need</strong> (e.g. 500 ml/hr in moderate temps), not to whatever your bottles happen to hold. If you carry 1.5 L for a ride that needs 1 L, the schedule covers 1 L and the rest stays in your bottles as reserve.</p>
+          <p>The carb totals reflect what you actually drink — if the schedule leaves mix in a bottle, those carbs aren&apos;t counted, and CycleFuel will suggest mixing stronger if that creates a shortfall.</p>
         </Accordion>
         <Accordion title="When does the schedule start?">
           <ul className="list-disc list-inside space-y-1">
@@ -159,9 +167,9 @@ export default function HelpPage() {
           <p>Solid food needs to be in your gut long enough to be digested and absorbed. An item eaten in the final 20 minutes will still be sitting in your stomach at the finish line — it contributes nothing to your energy and adds unnecessary digestive load during the hardest part of the effort.</p>
         </Accordion>
         <Accordion title="How many food items will CycleFuel schedule?">
-          <p className="mb-2">The app calculates the <strong>feed window</strong> — the time between the first food item and the last allowed checkpoint (20 min before finish). It then divides that window by 50 minutes:</p>
-          <p className="font-mono bg-muted rounded px-2 py-1 text-xs mb-2">maxItems = floor(feedWindowMinutes ÷ 50)</p>
-          <p>Items are scheduled at fixed 50-minute intervals starting from the first food checkpoint. If you&apos;ve selected more food items than fit in the window, the extras are dropped.</p>
+          <p className="mb-2">The app calculates the <strong>feed window</strong> — from the first allowed food checkpoint (30–45 min in) to the last one (20 min before finish). The slot at the window start counts, then one more every 50 minutes:</p>
+          <p className="font-mono bg-muted rounded px-2 py-1 text-xs mb-2">maxItems = floor(feedWindowMinutes ÷ 50) + 1</p>
+          <p>The first item is scheduled right at the window start, with fixed 50-minute steps after it. If you&apos;ve selected more food items than fit in the window, the extras are dropped.</p>
         </Accordion>
         <Accordion title="How is the carb split decided between drinks and food?">
           <p className="mb-2">CycleFuel fills carbs in this order:</p>
@@ -188,6 +196,23 @@ export default function HelpPage() {
         <Accordion title="How does CycleFuel handle long rides?">
           <p className="mb-2">If the weather-based fluid target exceeds what fits in your bottles, CycleFuel estimates how many refills you&apos;ll need and shows a warning. For example, needing 2.5 L with 2 L of bottles means roughly one refill.</p>
           <p>Plan for a feed zone, café stop, or carry an extra bottle for rides where the target fluid exceeds your bottle capacity.</p>
+        </Accordion>
+      </Section>
+
+      {/* Feedback / learning */}
+      <Section emoji="📝" title="Learning from your feedback">
+        <Card>
+          <p className="text-muted-foreground">After a ride, open the plan and log <span className="text-foreground font-medium">how it went</span> — were the carbs too much, just right, or too little? How was your stomach? Did the fluid last?</p>
+        </Card>
+        <Accordion title="How does CycleFuel use this?">
+          <p className="mb-2">CycleFuel looks at your last 5 rides with feedback (preferring rides at the same effort level) and adjusts the carb suggestion for new plans:</p>
+          <ul className="list-disc list-inside space-y-1 mb-2">
+            <li>Marked carbs <strong>&quot;too much&quot;</strong> on 2+ rides → suggestion steps down one level.</li>
+            <li>Marked <strong>&quot;too little&quot;</strong> on 2+ rides → suggestion steps up one level.</li>
+            <li>A rate that felt <strong>&quot;just right&quot;</strong> recently → that rate is suggested directly.</li>
+            <li>Repeated <strong>gut trouble</strong> → suggestions are capped at 60 g/hr until it settles.</li>
+          </ul>
+          <p>Fluid feedback works the same way: finish thirsty twice and the planner nudges you to carry an extra bottle. You can see a summary of what&apos;s been learned in Settings.</p>
         </Accordion>
       </Section>
 

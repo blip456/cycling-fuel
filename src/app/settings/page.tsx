@@ -12,7 +12,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import type { DrinkProduct, FoodItem, FuelPlan, UserProfile, CarbRatio } from "@/lib/types";
+import { CARB_RATE_OPTIONS } from "@/lib/types";
+import { summarizeFeedback } from "@/lib/personalization";
+import type { DrinkProduct, FoodItem, FuelPlan, UserProfile, CarbRatio, RideIntensity } from "@/lib/types";
 
 const CARB_RATIO_LABELS: Record<CarbRatio, string> = {
   "single": "Single source (glucose only)",
@@ -476,8 +478,13 @@ function ImportModal({
   );
 }
 
-const CARB_HOUR_OPTIONS = [45, 60, 90, 120] as const;
 const BOTTLE_SIZE_OPTIONS = [500, 750, 1000] as const;
+
+const INTENSITY_CHOICES: { value: RideIntensity; label: string }[] = [
+  { value: "easy", label: "Easy" },
+  { value: "steady", label: "Steady" },
+  { value: "hard", label: "Hard" },
+];
 
 export default function SettingsPage() {
   const {
@@ -564,9 +571,31 @@ export default function SettingsPage() {
           </div>
 
           <div>
+            <Label className="mb-2 block">Default Ride Effort</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {INTENSITY_CHOICES.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => updateProfile({ defaultIntensity: opt.value })}
+                  className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all duration-150 ${
+                    (profile.defaultIntensity ?? "steady") === opt.value
+                      ? "bg-primary text-white border-primary"
+                      : "bg-card text-foreground border-border hover:border-primary/50"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Used as the starting point for carb recommendations on new plans.
+            </p>
+          </div>
+
+          <div>
             <Label className="mb-2 block">Default Carbs per Hour</Label>
-            <div className="grid grid-cols-4 gap-2">
-              {CARB_HOUR_OPTIONS.map((opt) => (
+            <div className="grid grid-cols-5 gap-1.5">
+              {CARB_RATE_OPTIONS.map((opt) => (
                 <button
                   key={opt}
                   onClick={() => updateProfile({ defaultCarbsPerHour: opt })}
@@ -602,6 +631,39 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* What CycleFuel has learned from ride feedback */}
+      {(() => {
+        const summary = summarizeFeedback(plans);
+        if (summary.count === 0) return null;
+        return (
+          <section className="mb-7">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Your Fueling Insights
+            </h2>
+            <div className="bg-card rounded-2xl border border-border p-4">
+              <p className="text-sm text-foreground">
+                Based on <span className="font-semibold">{summary.count}</span> ride{summary.count !== 1 ? "s" : ""} with feedback:
+              </p>
+              <ul className="mt-2 flex flex-col gap-1.5 text-sm text-muted-foreground list-disc list-inside">
+                <li>
+                  {summary.carbTrend === "lower"
+                    ? "You tend to find the recommended carbs too much — suggestions are stepped down for you."
+                    : summary.carbTrend === "higher"
+                    ? "You tend to need more carbs than recommended — suggestions are stepped up for you."
+                    : "Your carb targets feel about right — suggestions stay at the science baseline."}
+                </li>
+                {summary.gutTrouble && (
+                  <li>Repeated gut trouble reported — carb suggestions are capped at 60g/hr until it settles.</li>
+                )}
+              </ul>
+              <p className="text-xs text-muted-foreground/70 mt-2.5">
+                Log feedback on a plan after the ride to keep improving these suggestions.
+              </p>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Drinks */}
       <section className="mb-7">

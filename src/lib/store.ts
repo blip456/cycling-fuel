@@ -57,8 +57,9 @@ export const useStore = create<AppStore>()(
   persist(
     (set, get) => ({
       profile: {
-        defaultCarbsPerHour: 90,
+        defaultCarbsPerHour: 60,
         defaultBottleMl: 500,
+        defaultIntensity: "steady",
       },
       drinks: DEFAULT_DRINKS,
       foods: DEFAULT_FOODS,
@@ -107,7 +108,10 @@ export const useStore = create<AppStore>()(
             return [...existing, ...incoming.filter((x) => !ids.has(x.id))];
           }
           return {
-            ...(profile ? { profile } : {}),
+            // Older backups predate defaultIntensity — backfill it
+            ...(profile
+              ? { profile: { ...profile, defaultIntensity: profile.defaultIntensity ?? "steady" } }
+              : {}),
             ...(drinks ? { drinks: merge(s.drinks, drinks, modes.drinks) } : {}),
             ...(foods ? { foods: merge(s.foods, foods, modes.foods) } : {}),
             ...(plans ? { plans: merge(s.plans, plans, modes.plans) } : {}),
@@ -115,11 +119,20 @@ export const useStore = create<AppStore>()(
         }),
 
       clearAll: () =>
-        set({ profile: { defaultCarbsPerHour: 90, defaultBottleMl: 500 }, drinks: DEFAULT_DRINKS, foods: DEFAULT_FOODS, plans: [] }),
+        set({ profile: { defaultCarbsPerHour: 60, defaultBottleMl: 500, defaultIntensity: "steady" }, drinks: DEFAULT_DRINKS, foods: DEFAULT_FOODS, plans: [] }),
     }),
     {
       name: "cycling-fuel-store",
       storage: createJSONStorage(() => localStorage),
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<AppStore>;
+        if (version < 1 && state.profile) {
+          // Existing users keep their carb default; intensity is new
+          state.profile.defaultIntensity ??= "steady";
+        }
+        return state as AppStore;
+      },
     }
   )
 );

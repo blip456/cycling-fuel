@@ -13,25 +13,34 @@ import { useStore } from "@/lib/store";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { geocodeLocation, fetchWeather } from "@/lib/weather";
 import { formatDuration, generateId } from "@/lib/utils";
-import { recommendedCarbsPerHour, calcMaxFoodItems } from "@/lib/plan-insights";
-import type { Bottle, SelectedDrink, FuelPlan } from "@/lib/types";
+import { calcMaxFoodItems } from "@/lib/plan-insights";
+import { personalizedCarbTarget, fluidFeedbackHint } from "@/lib/personalization";
+import { CARB_RATE_OPTIONS } from "@/lib/types";
+import type { Bottle, SelectedDrink, FuelPlan, CarbRate, RideIntensity } from "@/lib/types";
 
-const CARB_OPTIONS = [45, 60, 90, 120] as const;
 const BOTTLE_SIZES = [500, 750, 1000] as const;
 
 const CARB_TIPS: Record<number, string> = {
-  45: "Light rides under 90 min or low intensity. Single carb source is fine.",
-  60: "Solid choice for 1–2hr rides. Max absorption with one carb type.",
-  90: "Best for 2–4hr rides. Use a drink with glucose + fructose (2:1 ratio).",
-  120: "Long or high-intensity rides. Requires gut training and 1:1 glucose:fructose.",
+  30: "Easy / leisure pace. A light mix or one snack per hour covers it.",
+  45: "Comfortable endurance rides up to ~3hrs. Single carb source is fine.",
+  60: "Steady 2–3hr rides. Max absorption with one carb type.",
+  90: "Hard or long rides (3hr+). Use a drink with glucose + fructose (2:1 ratio).",
+  120: "Racing intakes. Requires gut training and 1:1 glucose:fructose.",
 };
+
+const INTENSITY_OPTIONS: { value: RideIntensity; label: string; desc: string }[] = [
+  { value: "easy", label: "Easy", desc: "Leisure pace, you can chat" },
+  { value: "steady", label: "Steady", desc: "Endurance pace, working" },
+  { value: "hard", label: "Hard", desc: "Race or fast group" },
+];
 
 interface WizardData {
   distance: string;
   avgSpeed: string;
   rideDate: string;
   location: string;
-  carbsPerHour: 45 | 60 | 90 | 120;
+  intensity: RideIntensity;
+  carbsPerHour: CarbRate;
   bottles: Bottle[];
   includeSolidFood: boolean;
   selectedDrinks: SelectedDrink[];
@@ -52,7 +61,7 @@ function loadDraft(): Partial<WizardData> | null {
 
 export default function NewPlanPage() {
   const router = useRouter();
-  const { profile, drinks, foods, savePlan } = useStore();
+  const { profile, drinks, foods, plans, savePlan } = useStore();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [locationError, setLocationError] = useState("");
@@ -64,6 +73,7 @@ export default function NewPlanPage() {
       avgSpeed: "",
       rideDate: today,
       location: "",
+      intensity: profile.defaultIntensity ?? "steady",
       carbsPerHour: profile.defaultCarbsPerHour,
       bottles: [{ id: generateId(), mlCapacity: profile.defaultBottleMl }],
       includeSolidFood: true,
@@ -194,6 +204,7 @@ export default function NewPlanPage() {
       lng,
       weather,
       carbsPerHour: data.carbsPerHour,
+      intensity: data.intensity,
       bottles: data.bottles,
       includeSolidFood: data.includeSolidFood,
       selectedDrinks: data.selectedDrinks,
@@ -288,6 +299,31 @@ export default function NewPlanPage() {
             )}
 
             <div>
+              <Label className="mb-2 block">How hard will you ride?</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {INTENSITY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => update("intensity", opt.value)}
+                    className={`py-2.5 px-2 rounded-xl border-2 transition-all duration-150 text-center ${
+                      data.intensity === opt.value
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card text-foreground border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold">{opt.label}</span>
+                    <span className={`block text-[10px] mt-0.5 leading-tight ${
+                      data.intensity === opt.value ? "text-primary-foreground/80" : "text-muted-foreground"
+                    }`}>{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Effort level changes how many carbs per hour we recommend.
+              </p>
+            </div>
+
+            <div>
               <Label htmlFor="date" className="mb-2 block">Date of Ride</Label>
               <Input
                 id="date"
@@ -335,8 +371,8 @@ export default function NewPlanPage() {
             {/* Carbs per hour */}
             <div>
               <Label className="mb-3 block">Carbs per Hour</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {CARB_OPTIONS.map((opt) => (
+              <div className="grid grid-cols-5 gap-1.5">
+                {CARB_RATE_OPTIONS.map((opt) => (
                   <button
                     key={opt}
                     onClick={() => update("carbsPerHour", opt)}
@@ -352,28 +388,36 @@ export default function NewPlanPage() {
               </div>
               <p className="text-xs text-muted-foreground mt-2 px-1">{CARB_TIPS[data.carbsPerHour]}</p>
 
-              {/* Duration-based carb suggestion */}
+              {/* Personalized carb suggestion (science baseline + your feedback) */}
               {(() => {
                 if (duration <= 0) return null;
-                const rec = recommendedCarbsPerHour(duration);
-                if (data.carbsPerHour >= rec) return null;
+                const suggestion = personalizedCarbTarget(duration, data.intensity, plans);
+                if (data.carbsPerHour === suggestion.suggested) return null;
+                const tooLow = data.carbsPerHour < suggestion.suggested;
+                const palette = tooLow
+                  ? { wrap: "bg-amber-50 border-amber-200", icon: "text-amber-500", title: "text-amber-800", body: "text-amber-700", btn: "text-amber-700 bg-amber-100 hover:bg-amber-200" }
+                  : { wrap: "bg-sky-50 border-sky-200", icon: "text-sky-500", title: "text-sky-800", body: "text-sky-700", btn: "text-sky-700 bg-sky-100 hover:bg-sky-200" };
+                const Icon = tooLow ? AlertTriangle : Info;
                 return (
-                  <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-3 flex items-start gap-3">
-                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className={`mt-3 rounded-xl border px-3.5 py-3 flex items-start gap-3 ${palette.wrap}`}>
+                    <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${palette.icon}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-amber-800">
-                        {rec}g/hr recommended for a {formatDuration(duration)} ride
+                      <p className={`text-sm font-semibold ${palette.title}`}>
+                        {suggestion.suggested}g/hr suggested for a {data.intensity} {formatDuration(duration)} ride
                       </p>
-                      <p className="text-xs text-amber-700 mt-0.5">
-                        At {data.carbsPerHour}g/hr glycogen may run out before the finish.
+                      <p className={`text-xs mt-0.5 ${palette.body}`}>
+                        {tooLow
+                          ? `At ${data.carbsPerHour}g/hr energy may fade before the finish. `
+                          : `${data.carbsPerHour}g/hr is more than this effort needs. `}
+                        {suggestion.feedbackCount > 0 ? suggestion.reason : ""}
                       </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => update("carbsPerHour", rec)}
-                      className="shrink-0 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                      onClick={() => update("carbsPerHour", suggestion.suggested)}
+                      className={`shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${palette.btn}`}
                     >
-                      Set {rec}g →
+                      Set {suggestion.suggested}g →
                     </button>
                   </div>
                 );
@@ -440,6 +484,21 @@ export default function NewPlanPage() {
                       {formatDuration(duration)} ride needs ~{(estimatedMl / 1000).toFixed(1)}L (500ml/hr baseline).
                       You have {(totalMl / 1000).toFixed(1)}L — consider adding a bottle.
                     </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Hydration hint learned from past ride feedback */}
+            {(() => {
+              const hint = fluidFeedbackHint(plans, data.intensity);
+              if (!hint) return null;
+              return (
+                <div className="rounded-xl bg-sage-light border border-primary/20 px-3.5 py-3 flex items-start gap-3">
+                  <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-primary">From your ride feedback</p>
+                    <p className="text-xs text-foreground/80 mt-0.5">{hint}</p>
                   </div>
                 </div>
               );
