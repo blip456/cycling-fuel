@@ -7,8 +7,8 @@ import { useState } from "react";
 function Section({ emoji, title, id, children }: { emoji: string; title: string; id?: string; children: React.ReactNode }) {
   return (
     <section id={id} className="mb-6 scroll-mt-16">
-      <h2 className="flex items-center gap-2 text-base font-bold text-foreground mb-3">
-        <span>{emoji}</span>
+      <h2 className="flex items-center gap-2.5 font-display text-2xl font-semibold text-foreground mb-4">
+        <span className="text-xl">{emoji}</span>
         {title}
       </h2>
       <div className="flex flex-col gap-2">{children}</div>
@@ -61,7 +61,7 @@ export default function HelpPage() {
         <Link href="/settings" className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground">
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <h1 className="text-2xl font-bold text-foreground">How CycleFuel works</h1>
+        <h1 className="font-display text-3xl font-semibold text-foreground">How CycleFuel <em className="text-primary">works</em></h1>
       </div>
 
       {/* How to use the app */}

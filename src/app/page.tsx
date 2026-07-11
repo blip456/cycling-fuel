@@ -3,14 +3,14 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, ChevronRight, Sun, Cloud, CloudRain, CloudLightning, Snowflake, Wind, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronRight, Sun, Cloud, CloudRain, CloudLightning, Snowflake, Wind, Trash2, Leaf } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration } from "@/lib/utils";
 import type { WeatherData, FuelPlan } from "@/lib/types";
 
 function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className?: string }) {
-  const props = { className: className ?? "h-4 w-4" };
+  const props = { className: className ?? "h-4 w-4", strokeWidth: 1.5 };
   switch (icon) {
     case "sun": return <Sun {...props} />;
     case "rain": return <CloudRain {...props} />;
@@ -21,7 +21,7 @@ function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className
   }
 }
 
-const DELETE_BTN_W = 80;
+const DELETE_BTN_W = 88;
 
 function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () => void }) {
   const duration = plan.result?.durationHours ?? plan.distance / plan.avgSpeed;
@@ -58,7 +58,7 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
   }
 
   return (
-    <div className="relative rounded-2xl overflow-hidden">
+    <div className="relative rounded-3xl overflow-hidden">
       {/* Delete action revealed behind the card */}
       <div
         className="absolute inset-y-0 right-0 flex items-center justify-center bg-destructive"
@@ -66,10 +66,11 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
       >
         <button
           onClick={onDelete}
-          className="flex flex-col items-center gap-1 text-white w-full h-full justify-center"
+          aria-label={`Delete plan for ${format(parseISO(plan.rideDate), "MMM d")}`}
+          className="flex flex-col items-center gap-1 text-destructive-foreground w-full h-full justify-center"
         >
-          <Trash2 className="h-4 w-4" />
-          <span className="text-[11px] font-semibold">Delete</span>
+          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+          <span className="text-[11px] font-semibold tracking-wide">Delete</span>
         </button>
       </div>
 
@@ -77,7 +78,7 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
       <div
         style={{
           transform: `translateX(${offsetX}px)`,
-          transition: dragging.current ? "none" : "transform 0.22s ease-out",
+          transition: dragging.current ? "none" : "transform 0.4s cubic-bezier(0.16,1,0.3,1)",
           willChange: "transform",
         }}
         onTouchStart={onTouchStart}
@@ -87,14 +88,14 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
         <Link
           href={`/plan/${plan.id}`}
           onClick={handleCardClick}
-          className="block bg-card rounded-2xl border border-border shadow-sm active:shadow-md overflow-hidden"
+          className="block bg-card rounded-3xl border border-border shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-500 ease-out overflow-hidden"
         >
-          <div className="p-4">
-            <div className="flex items-start justify-between gap-2">
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-foreground text-base">
-                    {format(parseISO(plan.rideDate), "MMM d, yyyy")}
+                  <span className="font-display text-xl font-semibold text-foreground">
+                    {format(parseISO(plan.rideDate), "MMMM d")}
                   </span>
                   {plan.weather && (
                     <span className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -108,30 +109,32 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
                   <span className="text-border">·</span>
                   <span>{formatDuration(duration)}</span>
                   <span className="text-border">·</span>
-                  <span className="text-primary font-medium">{plan.carbsPerHour}g carbs/hr</span>
+                  <span className="text-primary font-medium">{plan.carbsPerHour}g/hr</span>
                 </div>
                 {plan.location && (
                   <p className="mt-1 text-xs text-muted-foreground truncate">{plan.location}</p>
                 )}
               </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+              <span className="shrink-0 mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-sage-light text-primary">
+                <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
+              </span>
             </div>
           </div>
           {plan.result && (
-            <div className="px-4 pb-3 flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center rounded-full bg-sage-light text-primary text-xs font-medium px-2.5 py-0.5">
+            <div className="px-5 pb-4 flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center rounded-full bg-sage-light text-primary text-xs font-medium px-3 py-1">
                 {plan.result.totalCarbs}g carbs
               </span>
-              <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5">
+              <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground text-xs font-medium px-3 py-1">
                 {Math.round(plan.result.totalFluidMl / 100) / 10}L fluid
               </span>
               {plan.feedback ? (
-                <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground text-xs font-medium px-2.5 py-0.5">
-                  ✓ feedback logged
+                <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground text-xs font-medium px-3 py-1">
+                  ✓ logged
                 </span>
               ) : (
                 plan.rideDate <= format(new Date(), "yyyy-MM-dd") && (
-                  <span className="inline-flex items-center rounded-full bg-peach-light text-accent text-xs font-semibold px-2.5 py-0.5">
+                  <span className="inline-flex items-center rounded-full bg-peach-light text-accent text-xs font-semibold px-3 py-1">
                     Log how it went →
                   </span>
                 )
@@ -160,36 +163,44 @@ export default function HomePage() {
   );
 
   return (
-    <div className="px-4 pt-12 pb-nav">
-      <div className="mb-6">
-        <p className="text-sm text-muted-foreground font-medium">{getGreeting()}</p>
-        <h1 className="text-2xl font-bold text-foreground mt-0.5">
-          Ready to fuel your ride?
+    <div className="px-5 pt-14 pb-nav">
+      {/* Header */}
+      <header className="mb-8 animate-fade-up">
+        <p className="eyebrow text-sage">{getGreeting()}</p>
+        <h1 className="font-display text-4xl font-semibold text-foreground mt-2 leading-tight">
+          Ready to fuel<br />your <em className="text-primary">ride?</em>
         </h1>
-      </div>
+      </header>
 
+      {/* Primary CTA — an arch-topped invitation */}
       <button
         onClick={() => router.push("/plan/new")}
-        className="w-full flex items-center justify-between bg-primary text-primary-foreground rounded-2xl px-5 py-4 shadow-sm hover:bg-primary/90 active:scale-[0.99] transition-all duration-150 mb-8"
+        className="group w-full text-left bg-primary text-primary-foreground rounded-3xl p-6 shadow-md hover:shadow-lg hover:-translate-y-1 active:scale-[0.99] transition-all duration-500 ease-out mb-10 relative overflow-hidden animate-fade-up"
+        style={{ animationDelay: "80ms" }}
       >
-        <div className="text-left">
-          <div className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            <span className="font-semibold text-base">Plan a New Ride</span>
+        {/* Soft arch bloom in the corner */}
+        <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-primary-foreground/5 blur-xl" aria-hidden="true" />
+        <div className="relative flex items-center justify-between gap-4">
+          <div>
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-foreground/10 mb-4">
+              <Leaf className="h-5 w-5" strokeWidth={1.5} />
+            </span>
+            <p className="eyebrow text-primary-foreground/70">New ride</p>
+            <p className="font-display text-2xl font-semibold mt-1">Plan a new ride</p>
+            <p className="text-primary-foreground/80 text-sm mt-1">
+              Distance, products &amp; your fuel schedule
+            </p>
           </div>
-          <p className="text-primary-foreground/80 text-sm mt-0.5 ml-7">
-            Set distance, products &amp; get your fuel schedule
-          </p>
+          <span className="shrink-0 flex h-11 w-11 items-center justify-center rounded-full bg-primary-foreground/10 group-hover:bg-accent group-hover:translate-x-0.5 transition-all duration-300">
+            <ArrowRight className="h-5 w-5" strokeWidth={1.75} />
+          </span>
         </div>
-        <ChevronRight className="h-5 w-5 opacity-70 shrink-0" />
       </button>
 
       {sortedPlans.length > 0 ? (
-        <section>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-            Recent Plans
-          </h2>
-          <div className="flex flex-col gap-3">
+        <section className="animate-fade-up" style={{ animationDelay: "160ms" }}>
+          <h2 className="eyebrow text-muted-foreground mb-4">Recent rides</h2>
+          <div className="flex flex-col gap-4">
             {sortedPlans.map((plan) => (
               <SwipeToDeleteCard
                 key={plan.id}
@@ -200,10 +211,14 @@ export default function HomePage() {
           </div>
         </section>
       ) : (
-        <div className="text-center py-16">
-          <div className="text-5xl mb-4">🚴</div>
-          <p className="text-muted-foreground text-sm">No plans yet.</p>
-          <p className="text-muted-foreground text-sm">Tap &quot;Plan a New Ride&quot; to get started!</p>
+        <div className="text-center py-16 animate-fade-up" style={{ animationDelay: "160ms" }}>
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-sage-light">
+            <Leaf className="h-8 w-8 text-sage" strokeWidth={1.25} />
+          </div>
+          <p className="font-display text-xl text-foreground">No rides planned yet</p>
+          <p className="text-muted-foreground text-sm mt-1 max-w-xs mx-auto">
+            Plan your first ride and CycleFuel will craft a fueling schedule to match.
+          </p>
         </div>
       )}
     </div>

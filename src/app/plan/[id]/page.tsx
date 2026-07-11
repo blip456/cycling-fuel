@@ -127,7 +127,7 @@ function FeedbackSection({
 
   return (
     <section>
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+      <h2 className="eyebrow text-muted-foreground mb-3">
         📝 How did it go?
       </h2>
 
@@ -495,7 +495,7 @@ export default function PlanResultPage() {
                 <ArrowLeft className="h-4 w-4" />
                 Back
               </button>
-              <h1 className="font-semibold text-foreground text-sm">Your Fuel Plan</h1>
+              <h1 className="font-display font-semibold text-foreground text-base">Your Fuel Plan</h1>
               <div className="flex items-center gap-2">
                 <button
                   onClick={enterEditMode}
@@ -519,15 +519,16 @@ export default function PlanResultPage() {
 
       <div className="px-4 py-5 flex flex-col gap-5">
         {/* Summary card */}
-        <div className="bg-primary rounded-2xl p-4 text-primary-foreground">
-          <div className="flex items-start justify-between gap-2">
+        <div className="bg-primary rounded-3xl p-6 text-primary-foreground relative overflow-hidden animate-fade-up">
+          <div className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-primary-foreground/5 blur-xl" aria-hidden="true" />
+          <div className="relative flex items-start justify-between gap-2">
             <div>
-              <p className="text-primary-foreground/70 text-xs font-medium uppercase tracking-wide">
+              <p className="eyebrow text-primary-foreground/70">
                 {format(parseISO(plan.rideDate), "EEEE, MMMM d")}
               </p>
-              <div className="mt-1 flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-lg">{plan.distance} km</span>
-                <span className="text-primary-foreground/70">·</span>
+              <div className="mt-1.5 flex items-baseline gap-2 flex-wrap">
+                <span className="font-display text-3xl font-semibold">{plan.distance} km</span>
+                <span className="text-primary-foreground/60">·</span>
                 <span className="text-primary-foreground/90">{formatDuration(result.durationHours)}</span>
               </div>
             </div>
@@ -535,7 +536,7 @@ export default function PlanResultPage() {
               <div className="flex flex-col items-end gap-0.5">
                 <div className="flex items-center gap-1.5">
                   <WeatherIcon icon={plan.weather.icon} className="h-5 w-5" />
-                  <span className="font-bold text-lg">{plan.weather.tempC}°C</span>
+                  <span className="font-display text-2xl font-semibold">{plan.weather.tempC}°C</span>
                 </div>
                 <span className="text-xs text-primary-foreground/70">{plan.weather.description}</span>
                 {weatherMeta && (
@@ -553,14 +554,14 @@ export default function PlanResultPage() {
                 <Flame className="h-3.5 w-3.5" />
                 <span className="text-xs">Target/hr</span>
               </div>
-              <p className="font-bold transition-all duration-150">{displayCarbsPerHour}g</p>
+              <p className="font-display text-xl font-semibold transition-all duration-300">{displayCarbsPerHour}g</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-primary-foreground/70 mb-0.5">
                 <Bike className="h-3.5 w-3.5" />
                 <span className="text-xs">Total carbs</span>
               </div>
-              <p className="font-bold transition-all duration-150">{displayTotalCarbs}g</p>
+              <p className="font-display text-xl font-semibold transition-all duration-300">{displayTotalCarbs}g</p>
               <p className={`text-[10px] mt-0.5 font-medium ${
                 carbsDiff < -20 ? "text-amber-300" : "text-primary-foreground/50"
               }`}>
@@ -576,7 +577,7 @@ export default function PlanResultPage() {
                 <Droplets className="h-3.5 w-3.5" />
                 <span className="text-xs">Total water</span>
               </div>
-              <p className="font-bold">{(actualFluidMl / 1000).toFixed(1)}L</p>
+              <p className="font-display text-xl font-semibold">{(actualFluidMl / 1000).toFixed(1)}L</p>
               <p className={`text-[10px] mt-0.5 font-medium ${
                 fluidDiffMl < -250 ? "text-amber-300" : "text-primary-foreground/50"
               }`}>
@@ -658,7 +659,7 @@ export default function PlanResultPage() {
         {/* Edit: Ride Setup — carb target + bottle sizes */}
         {editMode && (
           <section>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            <h2 className="eyebrow text-muted-foreground mb-3">
               Ride Setup
             </h2>
             <div className="rounded-2xl border border-primary/40 bg-card p-4 flex flex-col gap-5">
@@ -757,7 +758,7 @@ export default function PlanResultPage() {
         {/* Bottle prep */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            <h2 className="eyebrow text-muted-foreground">
               🍼 Prep Your Bottles
             </h2>
             {editMode && (
@@ -867,7 +868,7 @@ export default function PlanResultPage() {
         {/* Schedule */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            <h2 className="eyebrow text-muted-foreground">
               🍌 On the Bike
             </h2>
             {editMode && (

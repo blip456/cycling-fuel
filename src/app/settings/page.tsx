@@ -602,7 +602,7 @@ function SweatRateSection() {
 
   return (
     <section className="mb-7">
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+      <h2 className="eyebrow text-muted-foreground mb-3">
         Your Sweat Rate
       </h2>
       <div className="bg-card rounded-2xl border border-border p-4">
@@ -719,11 +719,11 @@ export default function SettingsPage() {
 
   return (
     <div className="px-4 pt-12 pb-nav">
-      <h1 className="text-2xl font-bold text-foreground mb-6">Settings</h1>
+      <h1 className="font-display text-4xl font-semibold text-foreground mb-7 pt-2">Settings</h1>
 
       {/* Profile */}
       <section className="mb-7">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        <h2 className="eyebrow text-muted-foreground mb-3">
           Your Profile
         </h2>
         <div className="bg-card rounded-2xl border border-border p-4 flex flex-col gap-4">
@@ -815,7 +815,7 @@ export default function SettingsPage() {
         if (summary.count === 0) return null;
         return (
           <section className="mb-7">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            <h2 className="eyebrow text-muted-foreground mb-3">
               Your Fueling Insights
             </h2>
             <div className="bg-card rounded-2xl border border-border p-4">
@@ -964,7 +964,7 @@ export default function SettingsPage() {
 
       {/* Help */}
       <section className="mb-7">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        <h2 className="eyebrow text-muted-foreground mb-3">
           Help
         </h2>
         <a
@@ -981,7 +981,7 @@ export default function SettingsPage() {
 
       {/* Data Management */}
       <section className="mb-7">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        <h2 className="eyebrow text-muted-foreground mb-3">
           Data
         </h2>
 

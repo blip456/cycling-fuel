@@ -262,10 +262,10 @@ export default function NewPlanPage() {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground font-medium">
-              Step {step} of 3 — {stepTitles[step - 1]}
+            <p className="eyebrow text-sage">
+              Step {step} of 3 · <span className="text-muted-foreground normal-case tracking-normal font-normal">{stepTitles[step - 1]}</span>
             </p>
-            <Progress value={stepProgress} className="mt-1.5 h-1.5" />
+            <Progress value={stepProgress} className="mt-1.5 h-1" />
           </div>
         </div>
       </div>
@@ -275,8 +275,8 @@ export default function NewPlanPage() {
         {step === 1 && (
           <div className="flex flex-col gap-5">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Ride Details</h2>
-              <p className="text-sm text-muted-foreground mt-1">
+              <h2 className="font-display text-3xl font-semibold text-foreground">Ride <em className="text-primary">details</em></h2>
+              <p className="text-sm text-muted-foreground mt-1.5">
                 Tell us about the ride so we can calculate your fueling window.
               </p>
             </div>
@@ -321,9 +321,9 @@ export default function NewPlanPage() {
             </div>
 
             {duration > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-sage-light rounded-xl">
+              <div className="inline-flex items-center gap-2 self-start px-4 py-2 bg-sage-light rounded-full">
                 <span className="text-sm text-primary font-medium">
-                  Estimated ride time: {formatDuration(duration)}
+                  Estimated ride time · <span className="font-display font-semibold">{formatDuration(duration)}</span>
                 </span>
               </div>
             )}
@@ -426,8 +426,8 @@ export default function NewPlanPage() {
         {step === 2 && (
           <div className="flex flex-col gap-6">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Fueling & Hydration</h2>
-              <p className="text-sm text-muted-foreground mt-1">
+              <h2 className="font-display text-3xl font-semibold text-foreground">Fueling &amp; <em className="text-primary">hydration</em></h2>
+              <p className="text-sm text-muted-foreground mt-1.5">
                 Set your carb target and bottle setup for the ride.
               </p>
             </div>
@@ -651,8 +651,8 @@ export default function NewPlanPage() {
         {step === 3 && (
           <div className="flex flex-col gap-6">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Choose Products</h2>
-              <p className="text-sm text-muted-foreground mt-1">
+              <h2 className="font-display text-3xl font-semibold text-foreground">Choose <em className="text-primary">products</em></h2>
+              <p className="text-sm text-muted-foreground mt-1.5">
                 Select what you&apos;ll bring. Adjust scoops if you mix differently.
               </p>
             </div>
