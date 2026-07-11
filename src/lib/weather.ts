@@ -13,6 +13,18 @@ export function formatGeoLabel(g: GeoResult): string {
   return [g.name, g.admin1, g.country].filter(Boolean).join(", ");
 }
 
+// Build a WeatherData from a hand-entered temperature — used for indoor rides,
+// rides beyond the forecast horizon, or when the rider just knows the conditions.
+export function manualWeather(tempC: number): WeatherData {
+  let description = "Manual entry";
+  let icon: WeatherData["icon"] = "cloud";
+  if (tempC >= 25) { description = "Hot (manual)"; icon = "sun"; }
+  else if (tempC >= 15) { description = "Mild (manual)"; icon = "cloud"; }
+  else if (tempC >= 5) { description = "Cool (manual)"; icon = "cloud"; }
+  else { description = "Cold (manual)"; icon = "snow"; }
+  return { tempC: Math.round(tempC), description, icon, manual: true };
+}
+
 export async function searchLocations(
   query: string,
   count = 5,

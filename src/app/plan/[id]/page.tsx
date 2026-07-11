@@ -5,15 +5,16 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, Sun, Cloud, CloudRain, CloudLightning,
   Snowflake, Wind, Droplets, Flame, AlertTriangle, Bike, Coffee,
-  Pencil, X, Plus, Check, Trash2, Minus, Info, Download,
+  Pencil, X, Plus, Check, Trash2, Minus, Info, Download, RefreshCw,
 } from "lucide-react";
+import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
-import { formatDuration, formatTime, generateId } from "@/lib/utils";
+import { formatDuration, formatTime, generateId, formatBottleSize } from "@/lib/utils";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
 import { generateInsights, type PlanInsight } from "@/lib/plan-insights";
 import { generateGarminTCX } from "@/lib/export-garmin";
-import { CARB_RATE_OPTIONS } from "@/lib/types";
+import { CARB_RATE_OPTIONS, BOTTLE_SIZE_OPTIONS } from "@/lib/types";
 import type {
   FuelPlan, ScheduleItem, BottlePrep, WeatherData, Bottle,
   CarbRate, RideFeedback, FeedbackFeel, GutFeel,
@@ -231,6 +232,7 @@ type EditItem = {
   drink?: ScheduleItem["drink"];
   food?: { name: string; carbs: number } | null;
   note?: string;
+  refill?: boolean;
 };
 
 export default function PlanResultPage() {
@@ -391,12 +393,15 @@ export default function PlanResultPage() {
         carbsPerHour: editCarbsPerHour,
         bottles: editPlanBottles,
         includeSolidFood: plan.includeSolidFood,
+        includeCaffeine: plan.includeCaffeine,
         selectedDrinks: plan.selectedDrinks,
         selectedFoods: plan.selectedFoods,
         drinks,
         foods,
         weather: plan.weather,
         weightKg: profile.weightKg,
+        intensity: plan.intensity,
+        sweatRateMlPerHour: profile.sweatRateMlPerHour,
       });
       updatedPlan = { ...plan, carbsPerHour: editCarbsPerHour, bottles: editPlanBottles, result: newResult };
     } else {
@@ -596,6 +601,39 @@ export default function PlanResultPage() {
           </div>
         )}
 
+        {/* Caffeine note */}
+        {result.caffeineNote && (
+          <div className="flex gap-3 bg-peach-light border border-accent/20 rounded-2xl p-4">
+            <span className="text-base leading-none mt-0.5">☕</span>
+            <div>
+              <p className="text-sm font-semibold text-accent mb-0.5">Caffeine</p>
+              <p className="text-sm text-foreground">{result.caffeineNote}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Electrolytes */}
+        {(result.sodiumTargetMg ?? 0) > 0 &&
+          (result.durationHours >= 1.5 || (plan.weather?.tempC ?? 0) > 25) && (
+            <div className="flex gap-3 bg-card border border-border rounded-2xl p-4">
+              <span className="text-base leading-none mt-0.5">🧂</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-foreground">Electrolytes</p>
+                  <p className="text-sm font-bold text-primary">
+                    ~{result.sodiumDeliveredMg}mg
+                    <span className="text-xs font-normal text-muted-foreground"> / ~{result.sodiumTargetMg}mg lost</span>
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  You&apos;ll sweat out roughly {result.sodiumTargetMg}mg of sodium on this ride. Sodium helps you
+                  absorb fluid and carbs and keeps cramp at bay — top up with an electrolyte mix or salty food
+                  {(result.sodiumDeliveredMg ?? 0) < (result.sodiumTargetMg ?? 0) * 0.5 ? ", your current plan is light on it." : "."}
+                </p>
+              </div>
+            </div>
+          )}
+
         {/* Insights panel — calc warnings + smart suggestions */}
         {(() => {
           const extra = generateInsights(plan, result);
@@ -610,6 +648,9 @@ export default function PlanResultPage() {
           return (
             <div className="flex flex-col gap-2">
               {allInsights.map((ins) => <InsightCard key={ins.id} insight={ins} />)}
+              <Link href="/help" className="text-xs text-muted-foreground hover:text-primary hover:underline text-center py-1">
+                Why these suggestions? Learn the science →
+              </Link>
             </div>
           );
         })()}
@@ -626,7 +667,7 @@ export default function PlanResultPage() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
                   Carbs per hour
                 </p>
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-4 gap-1.5">
                   {CARB_RATE_OPTIONS.map((opt) => (
                     <button
                       key={opt}
@@ -654,24 +695,20 @@ export default function PlanResultPage() {
                       <span className="text-xs text-muted-foreground font-medium w-14 shrink-0">
                         Bottle {i + 1}
                       </span>
-                      <div className="flex-1 flex gap-1">
-                        {([500, 750, 1000] as const).map((ml) => (
-                          <button
-                            key={ml}
-                            onClick={() =>
-                              setEditPlanBottles((prev) =>
-                                prev.map((b) => b.id === bottle.id ? { ...b, mlCapacity: ml } : b)
-                              )
-                            }
-                            className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                              bottle.mlCapacity === ml
-                                ? "bg-primary text-white border-primary"
-                                : "bg-card text-muted-foreground border-border hover:border-primary/40"
-                            }`}
-                          >
-                            {ml}ml
-                          </button>
-                        ))}
+                      <div className="flex-1">
+                        <select
+                          value={bottle.mlCapacity}
+                          onChange={(e) =>
+                            setEditPlanBottles((prev) =>
+                              prev.map((b) => b.id === bottle.id ? { ...b, mlCapacity: Number(e.target.value) } : b)
+                            )
+                          }
+                          className="w-full py-1.5 px-2 rounded-lg text-xs font-medium border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        >
+                          {BOTTLE_SIZE_OPTIONS.map((ml) => (
+                            <option key={ml} value={ml}>{formatBottleSize(ml)}</option>
+                          ))}
+                        </select>
                       </div>
                       <button
                         onClick={() =>
@@ -870,7 +907,16 @@ export default function PlanResultPage() {
                     </div>
                     <div className="w-px bg-border self-stretch" />
                     <div className="flex-1 min-w-0">
-                      {item.note && <p className="text-sm text-muted-foreground">{item.note}</p>}
+                      {item.note && (
+                        item.refill ? (
+                          <div className="flex items-center gap-1.5">
+                            <RefreshCw className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+                            <p className="text-sm font-medium text-sky-700">{item.note}</p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">{item.note}</p>
+                        )
+                      )}
                       {item.drink && (
                         <div className="flex items-center gap-1.5">
                           <Droplets className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -901,7 +947,7 @@ export default function PlanResultPage() {
                       )}
 
                       {/* Food — edit mode */}
-                      {editMode && (
+                      {editMode && !item.refill && (
                         <div className="mt-1">
                           {item.food ? (
                             <div className="flex items-center gap-2">
@@ -936,26 +982,26 @@ export default function PlanResultPage() {
                           {/* Food placement science validation */}
                           {item.food && (() => {
                             const totalMin = result.durationHours * 60;
-                            const violations: string[] = [];
+                            const notes: string[] = [];
                             if (item.timeMin < 30)
-                              violations.push("before 30 min warmup");
+                              notes.push("quite early (gut still warming up)");
                             if (item.timeMin > totalMin - 20)
-                              violations.push("inside 20 min finish cutoff");
+                              notes.push("inside the last 20 min (may not digest in time)");
                             for (let j = 0; j < displaySchedule.length; j++) {
                               if (j !== i && displaySchedule[j].food) {
                                 const gap = Math.abs(displaySchedule[j].timeMin - item.timeMin);
-                                if (gap < 50) {
-                                  violations.push(`only ${gap} min from another food`);
+                                if (gap < 40) {
+                                  notes.push(`~${gap} min after another item (tight for a bar, fine for a gel)`);
                                   break;
                                 }
                               }
                             }
-                            if (violations.length === 0) return null;
+                            if (notes.length === 0) return null;
                             return (
-                              <div className="flex items-center gap-1.5 mt-1.5 px-2 py-1.5 bg-red-50 border border-red-200 rounded-lg">
-                                <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
-                                <span className="text-xs font-medium text-red-700">
-                                  ⚠ {violations.join(" · ")}
+                              <div className="flex items-center gap-1.5 mt-1.5 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+                                <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                                <span className="text-xs font-medium text-amber-700">
+                                  Heads up: {notes.join(" · ")}
                                 </span>
                               </div>
                             );
@@ -1005,6 +1051,17 @@ export default function PlanResultPage() {
             })}
           </div>
         </section>
+
+        {/* Recovery note */}
+        {!editMode && result.recoveryNote && (
+          <div className="flex gap-3 bg-sage-light border border-primary/20 rounded-2xl p-4">
+            <span className="text-base leading-none mt-0.5">🥣</span>
+            <div>
+              <p className="text-sm font-semibold text-primary mb-0.5">After the ride</p>
+              <p className="text-sm text-foreground">{result.recoveryNote}</p>
+            </div>
+          </div>
+        )}
 
         {/* Post-ride feedback — the learning loop */}
         {!editMode && plan.rideDate <= format(new Date(), "yyyy-MM-dd") && (

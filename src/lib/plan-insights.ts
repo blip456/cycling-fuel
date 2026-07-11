@@ -41,14 +41,16 @@ export function recommendedCarbsPerHour(
   }
 }
 
-// Feed window helpers (mirrors fuel-calculator logic)
-export function calcMaxFoodItems(durationH: number): number {
+// Feed window helpers (mirrors fuel-calculator logic). avgGapMin defaults to
+// the conservative bar/real-food spacing; pass a smaller value when the rider's
+// selection is mostly fast fuel (gels/chews) and more items realistically fit.
+export function calcMaxFoodItems(durationH: number, avgGapMin = 50): number {
   const durationMin = durationH * 60;
   const feedStartMin = Math.max(30, Math.min(45, Math.round(durationMin * 0.15)));
   const feedWindowMin = durationMin - feedStartMin - 20;
   if (feedWindowMin < 0) return 0;
   // The slot at the window start counts too, hence +1
-  return Math.floor(feedWindowMin / 50) + 1;
+  return Math.floor(feedWindowMin / Math.max(1, avgGapMin)) + 1;
 }
 
 export function generateInsights(
@@ -113,10 +115,10 @@ export function generateInsights(
     insights.push({
       id: "no-food-long",
       level: "suggestion",
-      title: `Solid food helps on rides ≥ 2.5 h`,
+      title: `Solid food usually helps on rides ≥ 2.5 h`,
       detail:
-        `Liquid carbs alone cause flavour fatigue and psychological flatness on long efforts. ` +
-        `Even one item (bar, banana) every 50 min keeps motivation and gut comfort higher.`,
+        `Many riders find liquid-only carbs bring flavour fatigue and a psychological flatness on long efforts. ` +
+        `A bit of real food or a bar now and then can keep motivation and gut comfort higher — worth trying and logging how it feels for you.`,
     });
   }
 
@@ -134,8 +136,9 @@ export function generateInsights(
           level: "warning",
           title: `${dropped} food item${dropped > 1 ? "s" : ""} don't fit the feed window`,
           detail:
-            `The 50-min spacing rule and 20-min pre-finish cutoff only allow ${maxItems} ` +
-            `item${maxItems !== 1 ? "s" : ""} on this ride. The rest of your selection stays in your pocket as backup.`,
+            `Typical solid-food spacing (a bar/real food takes ~45–50 min to clear; gels and chews less) ` +
+            `plus the 20-min pre-finish cutoff fit about ${maxItems} item${maxItems !== 1 ? "s" : ""} here. ` +
+            `The rest stays in your pocket as backup — and if you're mostly carrying gels you can space them closer.`,
         });
       } else {
         // Window has room — drinks already cover the target
