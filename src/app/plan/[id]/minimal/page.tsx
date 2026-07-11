@@ -130,6 +130,12 @@ export default function MinimalPlanPage() {
               <p className="text-xs text-gray-400">fluid</p>
             </div>
           </div>
+          {(result.sodiumTargetMg ?? 0) > 0 && (
+            <p className="text-xs text-gray-500 mt-2">
+              Sodium: ~{result.sodiumDeliveredMg}mg planned / ~{result.sodiumTargetMg}mg lost in sweat
+              {(result.sodiumDeliveredMg ?? 0) < (result.sodiumTargetMg ?? 0) * 0.5 ? " — add electrolytes" : ""}
+            </p>
+          )}
         </div>
 
         <hr className="border-gray-200 mb-4" />
@@ -158,11 +164,12 @@ export default function MinimalPlanPage() {
         <hr className="border-gray-200 mb-4" />
 
         {/* Pre-ride */}
-        {result.preRideNote && (
+        {(result.preRideNote || result.caffeineNote) && (
           <>
             <div className="mb-4">
               <p className="text-xs uppercase tracking-widest text-gray-400 mb-1.5">Pre-ride</p>
-              <p className="text-gray-700">{result.preRideNote}</p>
+              {result.preRideNote && <p className="text-gray-700">{result.preRideNote}</p>}
+              {result.caffeineNote && <p className="text-gray-700 mt-1.5">{result.caffeineNote}</p>}
             </div>
             <hr className="border-gray-200 mb-4" />
           </>
@@ -205,6 +212,16 @@ export default function MinimalPlanPage() {
             </tbody>
           </table>
         </div>
+
+        {result.recoveryNote && (
+          <>
+            <hr className="border-gray-200 my-4" />
+            <div>
+              <p className="text-xs uppercase tracking-widest text-gray-400 mb-1.5">Recovery</p>
+              <p className="text-gray-700">{result.recoveryNote}</p>
+            </div>
+          </>
+        )}
 
         <hr className="border-gray-200 mt-4 mb-3" />
         <p className="text-xs text-gray-400 text-center">

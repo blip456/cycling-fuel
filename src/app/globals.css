@@ -1,29 +1,35 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/*
+  Botanical / Organic Serif — CycleFuel
+  Earthbound palette tuned for WCAG AA: every text token clears 4.5:1 on the
+  surface it sits on. Sage & terracotta are used for fills/icons/pops; forest
+  greens carry the text.
+*/
 :root {
-  --background: #FAFAF7;
-  --foreground: #1C2526;
-  --card: #FFFFFF;
-  --card-foreground: #1C2526;
-  --primary: #6B9E7B;
-  --primary-foreground: #FFFFFF;
-  --secondary: #EDF3EF;
-  --secondary-foreground: #1C2526;
-  --muted: #F2F4F2;
-  --muted-foreground: #8A9BA8;
-  --accent: #F08060;
+  --background: #F4F1E8;        /* warm rice paper */
+  --foreground: #2C3930;        /* deep forest — body text (~12:1 on card) */
+  --card: #FFFFFF;              /* crisp white so cards float on the paper */
+  --card-foreground: #2C3930;
+  --primary: #375A45;           /* forest-pine — CTAs + emphasis (~8:1 both ways) */
+  --primary-foreground: #F7F5EF;
+  --secondary: #DCCFC2;         /* soft clay / mushroom */
+  --secondary-foreground: #2C3930;
+  --muted: #ECE6DA;             /* pale clay — muted fills */
+  --muted-foreground: #5A6559;  /* muted forest — secondary text (~6:1) */
+  --accent: #B15F43;            /* terracotta — pops & interactive (~4.7:1) */
   --accent-foreground: #FFFFFF;
-  --destructive: #E05A5A;
+  --destructive: #A84B41;       /* muted brick (~5.5:1) */
   --destructive-foreground: #FFFFFF;
-  --border: #E2E8E4;
-  --input: #E2E8E4;
-  --ring: #6B9E7B;
-  --radius: 0.75rem;
-  --sage: #6B9E7B;
-  --peach: #F08060;
-  --sage-light: #EDF3EF;
-  --peach-light: #FEF0EB;
+  --border: #E5DFD3;            /* warm stone — delicate, low contrast */
+  --input: #E5DFD3;
+  --ring: #8C9A84;              /* sage focus ring */
+  --radius: 1.5rem;             /* 24px — the rounded-3xl default */
+  --sage: #8C9A84;              /* decorative sage — icons, lines, accents */
+  --peach: #C27B66;             /* light terracotta — fills, icons */
+  --sage-light: #E7EBE1;        /* pale sage tint — chips, icon halos */
+  --peach-light: #F4E8E0;       /* soft terracotta tint — accent card bg */
 }
 
 @theme inline {
@@ -48,12 +54,26 @@
   --color-peach: var(--peach);
   --color-sage-light: var(--sage-light);
   --color-peach-light: var(--peach-light);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* Organic, gently-bumped radius scale — rounded-2xl lands on the design's
+     24px "standard card"; everything reads softer without turning bulbous. */
+  --radius-sm: 0.5rem;    /* 8px  */
+  --radius-md: 0.625rem;  /* 10px */
+  --radius-lg: 0.875rem;  /* 14px */
+  --radius-xl: 1.125rem;  /* 18px */
+  --radius-2xl: 1.5rem;   /* 24px — standard card */
+  --radius-3xl: 2rem;     /* 32px — large / hero */
+
+  --font-sans: var(--font-source-sans);
+  --font-serif: var(--font-playfair);
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+
+  /* Soft, diffused, forest-tinted elevation — never harsh drops */
+  --shadow-xs: 0 1px 2px 0 rgba(45, 58, 49, 0.04);
+  --shadow-sm: 0 4px 6px -1px rgba(45, 58, 49, 0.05);
+  --shadow-md: 0 10px 15px -3px rgba(45, 58, 49, 0.06);
+  --shadow-lg: 0 20px 40px -10px rgba(45, 58, 49, 0.07);
+  --shadow-xl: 0 25px 50px -12px rgba(45, 58, 49, 0.14);
 }
 
 * {
@@ -68,9 +88,39 @@ html {
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-source-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+}
+
+/* Playfair Display for display headings; italics are a signature accent */
+.font-display {
+  font-family: var(--font-playfair), Georgia, serif;
+  letter-spacing: -0.01em;
+}
+.font-display em,
+.font-display i {
+  font-style: italic;
+}
+
+/* Editorial "eyebrow" label — small, uppercase, wide tracking, sans */
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+/* Accessible focus indicator for every interactive element (many use raw
+   <button>s with custom classes). Sage ring, generous offset. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* Elements that draw their own ring shouldn't double up */
+.focus-ring-none:focus-visible {
+  outline: none;
 }
 
 /* iOS safe area support */
@@ -79,17 +129,17 @@ body {
 }
 
 .pb-nav {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 6.5rem);
 }
 
-/* Position a fixed element just above the bottom nav (~62px tall) */
+/* Position a fixed element just above the floating bottom nav */
 .bottom-above-nav {
-  bottom: calc(env(safe-area-inset-bottom) + 3.875rem);
+  bottom: calc(env(safe-area-inset-bottom) + 5.25rem);
 }
 
 /* Scroll padding that clears both the bottom nav and a fixed footer above it */
 .pb-wizard {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 10rem);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 11rem);
 }
 
 /* Smooth scrolling */
@@ -105,4 +155,31 @@ body {
 /* Ensure minimum tap target sizes */
 button, a, [role="button"] {
   min-height: 44px;
+}
+
+/* Arch: the iconic Roman-arch top used on hero imagery/cards */
+.arch-top {
+  border-top-left-radius: 999px;
+  border-top-right-radius: 999px;
+}
+
+/* Gentle entrance — elements float up into place (honoured only when the
+   user hasn't asked for reduced motion) */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Respect reduced-motion: strip transitions/animations/transforms */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-fade-up { animation: none !important; }
 }

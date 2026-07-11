@@ -54,8 +54,13 @@ export function generateGarminTCX(plan: FuelPlan): string {
       `CycleFuel Plan — ${format(parseISO(plan.rideDate), "MMM d, yyyy")}`,
       `${plan.distance}km · ${formatDuration(result.durationHours)} · ${plan.carbsPerHour}g carbs/hr`,
       `Total: ${result.totalCarbs}g carbs · ${Math.round(result.totalFluidMl / 100) / 10}L fluid`,
+      (result.sodiumTargetMg ?? 0) > 0
+        ? `Sodium: ~${result.sodiumDeliveredMg}mg planned / ~${result.sodiumTargetMg}mg lost`
+        : "",
       bottleSummary,
       plan.location ? `Location: ${plan.location}` : "",
+      result.caffeineNote ? `\n${result.caffeineNote}` : "",
+      result.recoveryNote ? `\nRecovery: ${result.recoveryNote}` : "",
       "",
       "Import: Garmin Connect → Training → Workouts → Import Workout, then sync to your Edge.",
     ]

@@ -12,9 +12,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { CARB_RATE_OPTIONS } from "@/lib/types";
+import { CARB_RATE_OPTIONS, BOTTLE_SIZE_OPTIONS, FOOD_TYPE_LABELS } from "@/lib/types";
 import { summarizeFeedback } from "@/lib/personalization";
-import type { DrinkProduct, FoodItem, FuelPlan, UserProfile, CarbRatio, RideIntensity } from "@/lib/types";
+import { formatBottleSize } from "@/lib/utils";
+import type { DrinkProduct, FoodItem, FoodType, FuelPlan, SweatTest, UserProfile, CarbRatio, RideIntensity } from "@/lib/types";
 
 const CARB_RATIO_LABELS: Record<CarbRatio, string> = {
   "single": "Single source (glucose only)",
@@ -30,6 +31,8 @@ const EMPTY_DRINK: Omit<DrinkProduct, "id"> = {
   mlPerServing: 500,
   carbsPerServing: 30,
   carbRatio: "2:1",
+  sodiumMgPerServing: 0,
+  caffeineMgPerServing: 0,
 };
 
 const EMPTY_FOOD: Omit<FoodItem, "id"> = {
@@ -37,6 +40,9 @@ const EMPTY_FOOD: Omit<FoodItem, "id"> = {
   brand: "",
   flavour: "",
   carbsPerServing: 25,
+  type: "bar",
+  sodiumMg: 0,
+  caffeineMg: 0,
 };
 
 function NumberStepper({
@@ -189,6 +195,22 @@ function DrinkModal({
             max={200}
             onChange={(v) => f("carbsPerServing", v)}
           />
+          <NumberStepper
+            label="Sodium per serving"
+            value={form.sodiumMgPerServing ?? 0}
+            unit="mg"
+            min={0}
+            max={3000}
+            onChange={(v) => f("sodiumMgPerServing", v)}
+          />
+          <NumberStepper
+            label="Caffeine per serving"
+            value={form.caffeineMgPerServing ?? 0}
+            unit="mg"
+            min={0}
+            max={500}
+            onChange={(v) => f("caffeineMgPerServing", v)}
+          />
 
           <div>
             <Label className="mb-2 block">Carb Ratio</Label>
@@ -282,6 +304,23 @@ function FoodModal({
             />
           </div>
 
+          <div>
+            <Label className="mb-2 block">Type</Label>
+            <Select value={form.type ?? "bar"} onValueChange={(v) => f("type", v as FoodType)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.entries(FOOD_TYPE_LABELS) as [FoodType, string][]).map(([val, label]) => (
+                  <SelectItem key={val} value={val}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Gels &amp; chews clear the stomach fast (can be spaced ~25–30 min apart); bars and real food need ~45–50 min.
+            </p>
+          </div>
+
           <NumberStepper
             label="Carbs per serving"
             value={form.carbsPerServing}
@@ -289,6 +328,22 @@ function FoodModal({
             min={1}
             max={200}
             onChange={(v) => f("carbsPerServing", v)}
+          />
+          <NumberStepper
+            label="Sodium per serving"
+            value={form.sodiumMg ?? 0}
+            unit="mg"
+            min={0}
+            max={2000}
+            onChange={(v) => f("sodiumMg", v)}
+          />
+          <NumberStepper
+            label="Caffeine per serving"
+            value={form.caffeineMg ?? 0}
+            unit="mg"
+            min={0}
+            max={500}
+            onChange={(v) => f("caffeineMg", v)}
           />
 
           <Button
@@ -478,13 +533,133 @@ function ImportModal({
   );
 }
 
-const BOTTLE_SIZE_OPTIONS = [500, 750, 1000] as const;
-
 const INTENSITY_CHOICES: { value: RideIntensity; label: string }[] = [
   { value: "easy", label: "Easy" },
   { value: "steady", label: "Steady" },
   { value: "hard", label: "Hard" },
 ];
+
+// Personal sweat-rate tester. Weigh in before, weigh out after (same scale,
+// minimal clothing), note what you drank. Loss = (before − after) + drunk.
+function SweatRateSection() {
+  const { profile, addSweatTest } = useStore();
+  const [open, setOpen] = useState(false);
+  const [durationMin, setDurationMin] = useState("");
+  const [before, setBefore] = useState("");
+  const [after, setAfter] = useState("");
+  const [drunk, setDrunk] = useState("");
+  const [tempC, setTempC] = useState("");
+
+  const num = (s: string) => parseFloat(s.replace(",", "."));
+  const d = num(durationMin);
+  const b = num(before);
+  const a = num(after);
+  const dr = num(drunk) || 0;
+  const lossL = b > 0 && a > 0 ? (b - a) + dr / 1000 : 0;
+  const rate = d > 0 && lossL > 0 ? Math.round((lossL * 1000) / (d / 60)) : 0;
+  const valid = rate > 0;
+
+  function save() {
+    if (!valid) return;
+    addSweatTest({
+      recordedAt: new Date().toISOString(),
+      durationMin: Math.round(d),
+      weightBeforeKg: b,
+      weightAfterKg: a,
+      fluidDrunkMl: Math.round(dr),
+      tempC: isNaN(num(tempC)) ? undefined : num(tempC),
+      sweatRateMlPerHour: rate,
+    });
+    setOpen(false);
+    setDurationMin(""); setBefore(""); setAfter(""); setDrunk(""); setTempC("");
+  }
+
+  const field = (
+    label: string,
+    value: string,
+    setValue: (v: string) => void,
+    placeholder: string,
+    unit: string
+  ) => (
+    <div className="flex-1 min-w-0">
+      <Label className="mb-1.5 block text-xs">{label}</Label>
+      <div className="relative">
+        <Input
+          type="text"
+          inputMode="decimal"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (/^-?[0-9]*[.,]?[0-9]*$/.test(v)) setValue(v);
+          }}
+          className="pr-9"
+        />
+        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{unit}</span>
+      </div>
+    </div>
+  );
+
+  return (
+    <section className="mb-7">
+      <h2 className="eyebrow text-muted-foreground mb-3">
+        Your Sweat Rate
+      </h2>
+      <div className="bg-card rounded-2xl border border-border p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {profile.sweatRateMlPerHour
+                ? `~${profile.sweatRateMlPerHour} ml/hr`
+                : "Not measured yet"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {profile.sweatRateMlPerHour
+                ? "Used instead of the weather baseline to pace your drinking."
+                : "Measure it once and hydration plans get personal."}
+            </p>
+          </div>
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+          >
+            {open ? "Close" : profile.sweatRateMlPerHour ? "Re-measure" : "Measure"}
+          </button>
+        </div>
+
+        {open && (
+          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Weigh yourself (kg) just before and just after a ride on the same scale, and note how much you drank.
+            </p>
+            <div className="flex gap-3">
+              {field("Ride length", durationMin, setDurationMin, "90", "min")}
+              {field("Fluid drunk", drunk, setDrunk, "750", "ml")}
+            </div>
+            <div className="flex gap-3">
+              {field("Weight before", before, setBefore, "72.5", "kg")}
+              {field("Weight after", after, setAfter, "71.4", "kg")}
+            </div>
+            {field("Temperature (optional)", tempC, setTempC, "20", "°C")}
+
+            {valid && (
+              <div className="rounded-xl bg-sage-light border border-primary/20 px-3.5 py-2.5">
+                <p className="text-sm font-semibold text-primary">≈ {rate} ml/hr</p>
+                <p className="text-xs text-foreground/70 mt-0.5">
+                  You lost about {lossL.toFixed(2)} L over {Math.round(d)} min.
+                </p>
+              </div>
+            )}
+            <Button className="w-full" disabled={!valid} onClick={save}>
+              <Check className="h-4 w-4 mr-1.5" />
+              Save Sweat Rate
+            </Button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 export default function SettingsPage() {
   const {
@@ -544,11 +719,11 @@ export default function SettingsPage() {
 
   return (
     <div className="px-4 pt-12 pb-nav">
-      <h1 className="text-2xl font-bold text-foreground mb-6">Settings</h1>
+      <h1 className="font-display text-4xl font-semibold text-foreground mb-7 pt-2">Settings</h1>
 
       {/* Profile */}
       <section className="mb-7">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        <h2 className="eyebrow text-muted-foreground mb-3">
           Your Profile
         </h2>
         <div className="bg-card rounded-2xl border border-border p-4 flex flex-col gap-4">
@@ -613,18 +788,18 @@ export default function SettingsPage() {
 
           <div>
             <Label className="mb-2 block">Default Bottle Size</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {BOTTLE_SIZE_OPTIONS.map((ml) => (
                 <button
                   key={ml}
                   onClick={() => updateProfile({ defaultBottleMl: ml })}
-                  className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all duration-150 ${
+                  className={`py-2.5 rounded-xl text-xs font-semibold border-2 transition-all duration-150 ${
                     profile.defaultBottleMl === ml
                       ? "bg-primary text-white border-primary"
                       : "bg-card text-foreground border-border hover:border-primary/50"
                   }`}
                 >
-                  {ml}ml
+                  {formatBottleSize(ml)}
                 </button>
               ))}
             </div>
@@ -632,13 +807,15 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <SweatRateSection />
+
       {/* What CycleFuel has learned from ride feedback */}
       {(() => {
-        const summary = summarizeFeedback(plans);
+        const summary = summarizeFeedback(plans, profile.defaultIntensity ?? "steady");
         if (summary.count === 0) return null;
         return (
           <section className="mb-7">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            <h2 className="eyebrow text-muted-foreground mb-3">
               Your Fueling Insights
             </h2>
             <div className="bg-card rounded-2xl border border-border p-4">
@@ -657,6 +834,15 @@ export default function SettingsPage() {
                   <li>Repeated gut trouble reported — carb suggestions are capped at 60g/hr until it settles.</li>
                 )}
               </ul>
+              {summary.gutTraining && !summary.gutTrouble && (
+                <div className="mt-3 rounded-xl border border-primary/20 bg-sage-light px-3.5 py-3 flex items-start gap-2.5">
+                  <span className="text-base leading-none mt-0.5">💪</span>
+                  <div>
+                    <p className="text-sm font-semibold text-primary">Gut training</p>
+                    <p className="text-xs text-foreground/80 mt-0.5">{summary.gutTraining.message}</p>
+                  </div>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground/70 mt-2.5">
                 Log feedback on a plan after the ride to keep improving these suggestions.
               </p>
@@ -690,6 +876,8 @@ export default function SettingsPage() {
                   )}
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {drink.scoopsRecommended} scoops / {drink.mlPerServing}ml · {drink.carbsPerServing}g carbs · {drink.carbRatio}
+                    {drink.sodiumMgPerServing ? ` · ${drink.sodiumMgPerServing}mg Na` : ""}
+                    {drink.caffeineMgPerServing ? ` · ${drink.caffeineMgPerServing}mg caf` : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -739,11 +927,12 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-foreground text-sm">{food.name}</p>
-                  {(food.brand || food.flavour) && (
-                    <p className="text-xs text-muted-foreground">
-                      {food.brand}{food.brand && food.flavour ? ` · ${food.flavour}` : food.flavour}
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {FOOD_TYPE_LABELS[food.type ?? "bar"]}
+                    {food.brand ? ` · ${food.brand}` : ""}
+                    {food.flavour ? ` · ${food.flavour}` : ""}
+                    {food.sodiumMg ? ` · ${food.sodiumMg}mg Na` : ""}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-sm font-bold text-primary">{food.carbsPerServing}g</span>
@@ -775,7 +964,7 @@ export default function SettingsPage() {
 
       {/* Help */}
       <section className="mb-7">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        <h2 className="eyebrow text-muted-foreground mb-3">
           Help
         </h2>
         <a
@@ -792,7 +981,7 @@ export default function SettingsPage() {
 
       {/* Data Management */}
       <section className="mb-7">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        <h2 className="eyebrow text-muted-foreground mb-3">
           Data
         </h2>
 

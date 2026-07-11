@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Loader2, Plus, Minus, X, Check, AlertTriangle, Info } from "lucide-react";
 import { format } from "date-fns";
@@ -11,23 +12,24 @@ import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useStore } from "@/lib/store";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
-import { geocodeLocation, fetchWeather } from "@/lib/weather";
+import { geocodeLocation, fetchWeather, manualWeather } from "@/lib/weather";
 import { LocationAutocomplete, type VerifiedLocation } from "@/components/location-autocomplete";
-import { formatDuration, generateId } from "@/lib/utils";
+import { formatDuration, generateId, formatBottleSize } from "@/lib/utils";
 import { calcMaxFoodItems } from "@/lib/plan-insights";
-import { personalizedCarbTarget, fluidFeedbackHint } from "@/lib/personalization";
-import { CARB_RATE_OPTIONS } from "@/lib/types";
+import { personalizedCarbTarget, fluidFeedbackHint, gutTrainingHint } from "@/lib/personalization";
+import { CARB_RATE_OPTIONS, BOTTLE_SIZE_OPTIONS, FOOD_GAP_MIN, FOOD_TYPE_LABELS } from "@/lib/types";
 import type { Bottle, SelectedDrink, FuelPlan, CarbRate, RideIntensity } from "@/lib/types";
-
-const BOTTLE_SIZES = [500, 750, 1000] as const;
 
 const CARB_TIPS: Record<number, string> = {
   30: "Easy / leisure pace. A light mix or one snack per hour covers it.",
   45: "Comfortable endurance rides up to ~3hrs. Single carb source is fine.",
   60: "Steady 2–3hr rides. Max absorption with one carb type.",
+  70: "Gut-training zone. Build up gradually with a glucose + fructose (2:1) mix.",
+  80: "Gut-training zone. Mixed glucose + fructose (2:1) recommended.",
   90: "Hard or long rides (3hr+). Use a drink with glucose + fructose (2:1 ratio).",
   120: "Racing intakes. Requires gut training and 1:1 glucose:fructose.",
 };
+
 
 const INTENSITY_OPTIONS: { value: RideIntensity; label: string; desc: string }[] = [
   { value: "easy", label: "Easy", desc: "Leisure pace, you can chat" },
@@ -45,6 +47,8 @@ interface WizardData {
   carbsPerHour: CarbRate;
   bottles: Bottle[];
   includeSolidFood: boolean;
+  includeCaffeine: boolean;
+  manualTempC: string;
   selectedDrinks: SelectedDrink[];
   selectedFoods: string[];
 }
@@ -80,6 +84,8 @@ export default function NewPlanPage() {
       carbsPerHour: profile.defaultCarbsPerHour,
       bottles: [{ id: generateId(), mlCapacity: profile.defaultBottleMl }],
       includeSolidFood: true,
+      includeCaffeine: false,
+      manualTempC: "",
       selectedDrinks: drinks.map((d) => ({ productId: d.id, scoopsOverride: undefined })),
       selectedFoods: foods.map((f) => f.id),
     };
@@ -114,7 +120,7 @@ export default function NewPlanPage() {
     update("bottles", data.bottles.filter((b) => b.id !== id));
   }
 
-  function updateBottleSize(id: string, ml: 500 | 750 | 1000) {
+  function updateBottleSize(id: string, ml: number) {
     update(
       "bottles",
       data.bottles.map((b) => (b.id === id ? { ...b, mlCapacity: ml } : b))
@@ -191,6 +197,13 @@ export default function NewPlanPage() {
       }
     }
 
+    // Fall back to a hand-entered temperature when there's no forecast (indoor,
+    // beyond the forecast horizon, or no location given).
+    const manualTemp = parseFloat(data.manualTempC.replace(",", "."));
+    if (!weather && !isNaN(manualTemp)) {
+      weather = manualWeather(manualTemp);
+    }
+
     const planId = generateId();
     const result = calculateFuelPlan({
       distance: distanceNum,
@@ -198,12 +211,15 @@ export default function NewPlanPage() {
       carbsPerHour: data.carbsPerHour,
       bottles: data.bottles,
       includeSolidFood: data.includeSolidFood,
+      includeCaffeine: data.includeCaffeine,
       selectedDrinks: data.selectedDrinks,
       selectedFoods: data.selectedFoods,
       drinks,
       foods,
       weather,
       weightKg: profile.weightKg,
+      intensity: data.intensity,
+      sweatRateMlPerHour: profile.sweatRateMlPerHour,
     });
 
     const plan: FuelPlan = {
@@ -220,6 +236,7 @@ export default function NewPlanPage() {
       intensity: data.intensity,
       bottles: data.bottles,
       includeSolidFood: data.includeSolidFood,
+      includeCaffeine: data.includeCaffeine,
       selectedDrinks: data.selectedDrinks,
       selectedFoods: data.selectedFoods,
       result,
@@ -245,10 +262,10 @@ export default function NewPlanPage() {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground font-medium">
-              Step {step} of 3 — {stepTitles[step - 1]}
+            <p className="eyebrow text-sage">
+              Step {step} of 3 · <span className="text-muted-foreground normal-case tracking-normal font-normal">{stepTitles[step - 1]}</span>
             </p>
-            <Progress value={stepProgress} className="mt-1.5 h-1.5" />
+            <Progress value={stepProgress} className="mt-1.5 h-1" />
           </div>
         </div>
       </div>
@@ -258,8 +275,8 @@ export default function NewPlanPage() {
         {step === 1 && (
           <div className="flex flex-col gap-5">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Ride Details</h2>
-              <p className="text-sm text-muted-foreground mt-1">
+              <h2 className="font-display text-3xl font-semibold text-foreground">Ride <em className="text-primary">details</em></h2>
+              <p className="text-sm text-muted-foreground mt-1.5">
                 Tell us about the ride so we can calculate your fueling window.
               </p>
             </div>
@@ -304,9 +321,9 @@ export default function NewPlanPage() {
             </div>
 
             {duration > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-sage-light rounded-xl">
+              <div className="inline-flex items-center gap-2 self-start px-4 py-2 bg-sage-light rounded-full">
                 <span className="text-sm text-primary font-medium">
-                  Estimated ride time: {formatDuration(duration)}
+                  Estimated ride time · <span className="font-display font-semibold">{formatDuration(duration)}</span>
                 </span>
               </div>
             )}
@@ -377,6 +394,31 @@ export default function NewPlanPage() {
                 </p>
               )}
             </div>
+
+            <div>
+              <Label htmlFor="manualTemp" className="mb-2 block">
+                Temperature
+                <span className="text-muted-foreground font-normal ml-1">(optional — used if no forecast)</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="manualTemp"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="e.g. 18"
+                  value={data.manualTempC}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (/^-?[0-9]*[.,]?[0-9]*$/.test(v)) update("manualTempC", v);
+                  }}
+                  className="pr-10"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">°C</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Handy for indoor rides or dates beyond the forecast. A live forecast takes priority.
+              </p>
+            </div>
           </div>
         )}
 
@@ -384,16 +426,21 @@ export default function NewPlanPage() {
         {step === 2 && (
           <div className="flex flex-col gap-6">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Fueling & Hydration</h2>
-              <p className="text-sm text-muted-foreground mt-1">
+              <h2 className="font-display text-3xl font-semibold text-foreground">Fueling &amp; <em className="text-primary">hydration</em></h2>
+              <p className="text-sm text-muted-foreground mt-1.5">
                 Set your carb target and bottle setup for the ride.
               </p>
             </div>
 
             {/* Carbs per hour */}
             <div>
-              <Label className="mb-3 block">Carbs per Hour</Label>
-              <div className="grid grid-cols-5 gap-1.5">
+              <div className="flex items-center justify-between mb-3">
+                <Label className="mb-0">Carbs per Hour</Label>
+                <Link href="/help#carbs" className="text-xs font-medium text-primary hover:underline">
+                  Why these numbers?
+                </Link>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
                 {CARB_RATE_OPTIONS.map((opt) => (
                   <button
                     key={opt}
@@ -444,6 +491,28 @@ export default function NewPlanPage() {
                   </div>
                 );
               })()}
+
+              {/* Gut-training progression — nudge intake up once it's comfortable */}
+              {(() => {
+                const hint = gutTrainingHint(plans, data.intensity);
+                if (!hint || data.carbsPerHour >= hint.suggested) return null;
+                return (
+                  <div className="mt-3 rounded-xl border border-primary/20 bg-sage-light px-3.5 py-3 flex items-start gap-3">
+                    <span className="text-base leading-none mt-0.5">💪</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-primary">Train your gut: try {hint.suggested}g/hr</p>
+                      <p className="text-xs text-foreground/80 mt-0.5">{hint.message}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => update("carbsPerHour", hint.suggested)}
+                      className="shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors whitespace-nowrap"
+                    >
+                      Set {hint.suggested}g →
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Bottles */}
@@ -453,20 +522,16 @@ export default function NewPlanPage() {
                 {data.bottles.map((bottle, i) => (
                   <div key={bottle.id} className="flex items-center gap-3 bg-card rounded-xl border border-border px-3 py-2.5">
                     <span className="text-sm text-muted-foreground font-medium w-16 shrink-0">Bottle {i + 1}</span>
-                    <div className="flex-1 flex gap-1">
-                      {BOTTLE_SIZES.map((ml) => (
-                        <button
-                          key={ml}
-                          onClick={() => updateBottleSize(bottle.id, ml)}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all duration-150 ${
-                            bottle.mlCapacity === ml
-                              ? "bg-primary text-white border-primary"
-                              : "bg-background text-muted-foreground border-border hover:border-primary/40"
-                          }`}
-                        >
-                          {ml}ml
-                        </button>
-                      ))}
+                    <div className="flex-1">
+                      <select
+                        value={bottle.mlCapacity}
+                        onChange={(e) => updateBottleSize(bottle.id, Number(e.target.value))}
+                        className="w-full py-2 px-2.5 rounded-lg text-sm font-medium border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      >
+                        {BOTTLE_SIZE_OPTIONS.map((ml) => (
+                          <option key={ml} value={ml}>{formatBottleSize(ml)}</option>
+                        ))}
+                      </select>
                     </div>
                     <button
                       onClick={() => removeBottle(bottle.id)}
@@ -495,16 +560,22 @@ export default function NewPlanPage() {
             {(() => {
               if (duration <= 0) return null;
               const totalMl = data.bottles.reduce((s, b) => s + b.mlCapacity, 0);
-              const estimatedMl = Math.round(duration * 500); // 500ml/hr baseline
+              const perHour = profile.sweatRateMlPerHour && profile.sweatRateMlPerHour > 0
+                ? profile.sweatRateMlPerHour
+                : 500;
+              const estimatedMl = Math.round(duration * perHour);
               if (totalMl >= estimatedMl * 0.75) return null;
+              const basis = profile.sweatRateMlPerHour && profile.sweatRateMlPerHour > 0
+                ? "your sweat rate"
+                : "500ml/hr baseline";
               return (
                 <div className="rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-3 flex items-start gap-3">
                   <Info className="h-4 w-4 text-sky-500 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-semibold text-sky-800">Bottles may be short on fluid</p>
                     <p className="text-xs text-sky-700 mt-0.5">
-                      {formatDuration(duration)} ride needs ~{(estimatedMl / 1000).toFixed(1)}L (500ml/hr baseline).
-                      You have {(totalMl / 1000).toFixed(1)}L — consider adding a bottle.
+                      {formatDuration(duration)} ride needs ~{(estimatedMl / 1000).toFixed(1)}L ({perHour}ml/hr, {basis}).
+                      You have {(totalMl / 1000).toFixed(1)}L — you can refill en route or add a bottle.
                     </p>
                   </div>
                 </div>
@@ -549,6 +620,30 @@ export default function NewPlanPage() {
                 ))}
               </div>
             </div>
+
+            {/* Caffeine */}
+            <div className="flex items-center justify-between bg-card rounded-xl border border-border px-4 py-3.5">
+              <div className="min-w-0 pr-3">
+                <p className="text-sm font-medium text-foreground">Caffeine plan?</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Evidence-based timing (~3mg/kg pre-ride).</p>
+              </div>
+              <div className="flex rounded-xl overflow-hidden border border-border shrink-0">
+                {([true, false] as const).map((val) => (
+                  <button
+                    key={String(val)}
+                    type="button"
+                    onClick={() => update("includeCaffeine", val)}
+                    className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                      data.includeCaffeine === val
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-card text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {val ? "Yes" : "No"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -556,8 +651,8 @@ export default function NewPlanPage() {
         {step === 3 && (
           <div className="flex flex-col gap-6">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Choose Products</h2>
-              <p className="text-sm text-muted-foreground mt-1">
+              <h2 className="font-display text-3xl font-semibold text-foreground">Choose <em className="text-primary">products</em></h2>
+              <p className="text-sm text-muted-foreground mt-1.5">
                 Select what you&apos;ll bring. Adjust scoops if you mix differently.
               </p>
             </div>
@@ -696,7 +791,10 @@ export default function NewPlanPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-foreground">{food.name}</p>
-                            {food.brand && <p className="text-xs text-muted-foreground">{food.brand}</p>}
+                            <p className="text-xs text-muted-foreground">
+                              {FOOD_TYPE_LABELS[food.type ?? "bar"]}
+                              {food.brand ? ` · ${food.brand}` : ""}
+                            </p>
                           </div>
                           <span className="text-sm font-semibold text-primary shrink-0">{food.carbsPerServing}g</span>
                         </button>
@@ -708,7 +806,13 @@ export default function NewPlanPage() {
                 {/* Food count vs schedule capacity */}
                 {(() => {
                   if (duration <= 0 || data.selectedFoods.length === 0) return null;
-                  const maxItems = calcMaxFoodItems(duration);
+                  const chosen = data.selectedFoods
+                    .map((id) => foods.find((f) => f.id === id))
+                    .filter(Boolean) as { type?: keyof typeof FOOD_GAP_MIN }[];
+                  const avgGap = chosen.length
+                    ? Math.round(chosen.reduce((s, f) => s + FOOD_GAP_MIN[f.type ?? "bar"], 0) / chosen.length)
+                    : 50;
+                  const maxItems = calcMaxFoodItems(duration, avgGap);
                   const selected = data.selectedFoods.length;
                   if (selected <= maxItems) {
                     return (

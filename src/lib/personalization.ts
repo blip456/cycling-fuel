@@ -95,16 +95,60 @@ export function fluidFeedbackHint(plans: FuelPlan[], intensity: RideIntensity): 
   return null;
 }
 
+export interface GutTrainingHint {
+  current: CarbRate;
+  suggested: CarbRate;
+  message: string;
+}
+
+// Gut training: your carb tolerance is trainable. If the rider has recently and
+// repeatedly handled a given intake comfortably (felt right or wanted more, no
+// gut trouble), nudge them one step up on the next similar ride — the deliberate
+// progression that actually raises a limit. Never pushes into racing territory
+// (90g/hr+) on its own; that stays an explicit opt-in.
+export function gutTrainingHint(
+  plans: FuelPlan[],
+  intensity: RideIntensity
+): GutTrainingHint | null {
+  const relevant = recentFeedbackPlans(plans, intensity);
+  if (relevant.length < 2) return null;
+  if (relevant.some((p) => p.feedback!.gutFeel === "bad")) return null;
+
+  const comfortable = relevant.filter(
+    (p) =>
+      (p.feedback!.carbFeel === "right" || p.feedback!.carbFeel === "too_little") &&
+      (p.feedback!.gutFeel === undefined || p.feedback!.gutFeel === "fine")
+  );
+  if (comfortable.length < 2) return null;
+
+  const maxIdx = comfortable.reduce(
+    (m, p) => Math.max(m, CARB_RATE_OPTIONS.indexOf(p.carbsPerHour)),
+    0
+  );
+  const current = CARB_RATE_OPTIONS[maxIdx];
+  if (current >= 90) return null;
+  const suggested = stepRate(current, 1);
+  if (suggested === current) return null;
+
+  return {
+    current,
+    suggested,
+    message: `You've handled ${current}g/hr comfortably on recent ${intensity} rides with no gut trouble. Your gut adapts to practice — try nudging to ${suggested}g/hr next time to train it upward.`,
+  };
+}
+
 export interface FeedbackSummary {
   count: number;
   carbTrend: "lower" | "higher" | "settled" | null;
   gutTrouble: boolean;
+  gutTraining: GutTrainingHint | null;
 }
 
 // Compact summary for the settings page.
-export function summarizeFeedback(plans: FuelPlan[]): FeedbackSummary {
+export function summarizeFeedback(plans: FuelPlan[], intensity: RideIntensity = "steady"): FeedbackSummary {
   const withFeedback = plans.filter((p) => p.feedback);
-  if (withFeedback.length === 0) return { count: 0, carbTrend: null, gutTrouble: false };
+  if (withFeedback.length === 0)
+    return { count: 0, carbTrend: null, gutTrouble: false, gutTraining: null };
   const recent = withFeedback
     .sort((a, b) => new Date(b.rideDate).getTime() - new Date(a.rideDate).getTime())
     .slice(0, MAX_FEEDBACK_LOOKBACK);
@@ -114,5 +158,5 @@ export function summarizeFeedback(plans: FuelPlan[]): FeedbackSummary {
   if (tooMuch >= 2 && tooLittle === 0) carbTrend = "lower";
   else if (tooLittle >= 2 && tooMuch === 0) carbTrend = "higher";
   const gutTrouble = recent.filter((p) => p.feedback!.gutFeel === "bad").length >= 2;
-  return { count: withFeedback.length, carbTrend, gutTrouble };
+  return { count: withFeedback.length, carbTrend, gutTrouble, gutTraining: gutTrainingHint(plans, intensity) };
 }

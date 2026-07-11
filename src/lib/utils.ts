@@ -22,3 +22,9 @@ export function formatTime(totalMinutes: number): string {
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
+
+export function formatBottleSize(ml: number): string {
+  if (ml <= 250) return "250ml flask";
+  if (ml >= 1500) return `${(ml / 1000).toFixed(1)}L pack`;
+  return `${ml}ml`;
+}

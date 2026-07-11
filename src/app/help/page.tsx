@@ -4,11 +4,11 @@ import Link from "next/link";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
-function Section({ emoji, title, children }: { emoji: string; title: string; children: React.ReactNode }) {
+function Section({ emoji, title, id, children }: { emoji: string; title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section className="mb-6">
-      <h2 className="flex items-center gap-2 text-base font-bold text-foreground mb-3">
-        <span>{emoji}</span>
+    <section id={id} className="mb-6 scroll-mt-16">
+      <h2 className="flex items-center gap-2.5 font-display text-2xl font-semibold text-foreground mb-4">
+        <span className="text-xl">{emoji}</span>
         {title}
       </h2>
       <div className="flex flex-col gap-2">{children}</div>
@@ -61,7 +61,7 @@ export default function HelpPage() {
         <Link href="/settings" className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground">
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <h1 className="text-2xl font-bold text-foreground">How CycleFuel works</h1>
+        <h1 className="font-display text-3xl font-semibold text-foreground">How CycleFuel <em className="text-primary">works</em></h1>
       </div>
 
       {/* How to use the app */}
@@ -80,18 +80,19 @@ export default function HelpPage() {
       </Section>
 
       {/* Carb targets */}
-      <Section emoji="🔥" title="Carb targets per hour">
+      <Section emoji="🔥" title="Carb targets per hour" id="carbs">
         <Card>
           <div className="divide-y divide-border">
             <Stat label="30 g/hr" value="Easy / leisure pace" />
             <Stat label="45 g/hr" value="Easy long or steady short rides" />
             <Stat label="60 g/hr" value="Steady 2–3 h, single carb source" />
+            <Stat label="70–80 g/hr" value="Gut-training zone, mixed carbs" />
             <Stat label="90 g/hr" value="Hard or 3 h+ rides, mixed carbs" />
             <Stat label="120 g/hr" value="Racing, gut-trained athletes" />
           </div>
         </Card>
         <Card>
-          <p className="text-muted-foreground">Recommendations scale with <span className="text-foreground font-medium">both duration and effort</span>. A 3-hour leisure ride burns far fewer carbs than a 3-hour race — pick your ride effort (Easy / Steady / Hard) in step 1 and CycleFuel adjusts the suggestion. 120 g/hr is never auto-recommended; it&apos;s an opt-in for gut-trained racers.</p>
+          <p className="text-muted-foreground">Recommendations scale with <span className="text-foreground font-medium">both duration and effort</span>. A 3-hour leisure ride burns far fewer carbs than a 3-hour race — pick your ride effort (Easy / Steady / Hard) in step 1 and CycleFuel adjusts the suggestion. The <span className="text-foreground font-medium">70 and 80 g/hr</span> steps sit in the gut-training zone so you can nudge intake up in small jumps rather than leaping 60 → 90. 120 g/hr is never auto-recommended; it&apos;s an opt-in for gut-trained racers.</p>
         </Card>
         <Accordion title="Why does the limit change?">
           <p className="mb-2">Your gut absorbs carbohydrates through transporters in the small intestine. Glucose uses the SGLT1 transporter — it saturates at around <strong>60 g/hr</strong>. Beyond that, extra glucose simply isn&apos;t absorbed and causes stomach distress.</p>
@@ -109,7 +110,7 @@ export default function HelpPage() {
       </Section>
 
       {/* Fluid */}
-      <Section emoji="💧" title="Fluid recommendations">
+      <Section emoji="💧" title="Fluid recommendations" id="fluid">
         <Card>
           <div className="divide-y divide-border">
             <Stat label="Cold  (&lt; 15 °C)" value="400 ml / hr" />
@@ -117,9 +118,31 @@ export default function HelpPage() {
             <Stat label="Hot  (&gt; 25 °C)" value="650 ml / hr" />
           </div>
         </Card>
+        <Card>
+          <p className="text-muted-foreground">These temperature baselines are a <span className="text-foreground font-medium">starting point</span> — real sweat rates run anywhere from 0.5 to over 2 L/hr depending on your body, effort and humidity. The honest approach: use the baseline, then drink to thirst and learn your own number. Measure it in <span className="text-foreground font-medium">Settings → Your Sweat Rate</span> and CycleFuel paces you to that instead.</p>
+        </Card>
         <Accordion title="Where do these numbers come from?">
-          <p>These are conservative, science-backed baselines for recreational cyclists. Actual sweat rate varies by body size, effort and humidity. In hot conditions CycleFuel flags a warning to remind you to top up your bottles fully.</p>
-          <p className="mt-2">The <strong>target fluid</strong> shown in the summary is the recommended total for the ride. <strong>Total water</strong> is what you&apos;re actually bringing in bottles — if it falls short you&apos;ll see the gap highlighted.</p>
+          <p>These are conservative baselines for recreational cyclists. Actual sweat rate varies by body size, effort and humidity. In hot conditions CycleFuel flags a warning to remind you to top up your bottles fully.</p>
+          <p className="mt-2">The <strong>target fluid</strong> shown in the summary is the recommended total for the ride. <strong>Total water</strong> is what you&apos;re actually bringing in bottles — if it falls short you&apos;ll see the gap highlighted, and on rides longer than your bottles hold the schedule paces you to the full target and marks <strong>refill</strong> points.</p>
+        </Accordion>
+        <Accordion title="How do I measure my sweat rate?">
+          <p className="mb-2">Weigh yourself (kg) right before and right after a ride on the same scale, wearing about the same, and note how much you drank. Then:</p>
+          <p className="font-mono bg-muted rounded px-2 py-1 text-xs mb-2">sweat/hr = ((before − after) L + drunk L) ÷ hours</p>
+          <p>Do it in <strong>Settings → Your Sweat Rate</strong> and CycleFuel saves the result and uses it to pace your drinking. Repeat on a hot day and a cool day — you&apos;ll see how much conditions change it.</p>
+        </Accordion>
+      </Section>
+
+      {/* Electrolytes */}
+      <Section emoji="🧂" title="Electrolytes &amp; sodium" id="sodium">
+        <Card>
+          <p className="text-muted-foreground">Sweat isn&apos;t just water — it carries <span className="text-foreground font-medium">sodium</span>, roughly 0.5–1.5 g per litre (more if you&apos;re a &quot;salty sweater&quot; with white crust on your kit). On long or hot rides, replacing only water can leave you flat, crampy, or — over many hours — dangerously dilute your blood sodium.</p>
+        </Card>
+        <Accordion title="Why does sodium matter?">
+          <p className="mb-2">Two reasons. First, it keeps your blood sodium in a safe range on long efforts. Second, sodium actively <strong>helps you absorb both fluid and glucose</strong> — the SGLT1 glucose doorway is sodium-powered, so a little salt speeds everything through.</p>
+          <p>CycleFuel estimates the sodium you&apos;ll lose (about 800 mg per litre of sweat) and adds up what your drinks and food replace. Set sodium on your products in Settings, and the plan flags long or hot rides where you&apos;re coming up short.</p>
+        </Accordion>
+        <Accordion title="How much should I take?">
+          <p>Most riders do well around <strong>300–700 mg of sodium per litre of fluid</strong> on rides over ~2 hours or in the heat. Very salty sweaters or ultra-distance riders may want more. It&apos;s individual — start in that range and adjust based on how you feel and whether you cramp.</p>
         </Accordion>
       </Section>
 
@@ -147,29 +170,32 @@ export default function HelpPage() {
       </Section>
 
       {/* Solid food */}
-      <Section emoji="🍌" title="Solid food pacing">
+      <Section emoji="🍌" title="Solid food pacing" id="food">
         <Card>
           <div className="divide-y divide-border">
-            <Stat label="Minimum warmup" value="30 min before first food" />
-            <Stat label="Spacing between items" value="Every 50 min" />
+            <Stat label="Typical warmup" value="~30 min before first food" />
+            <Stat label="Spacing (bar / real food)" value="~45–50 min" />
+            <Stat label="Spacing (gels / chews)" value="~25–30 min" />
             <Stat label="Feed window closes" value="20 min before finish" />
           </div>
         </Card>
-        <Accordion title="Why wait 30 minutes before eating?">
-          <p className="mb-2">During the first 30 minutes your body is ramping up — blood is redirecting to working muscles, heart rate is climbing and your digestive system is winding down. Eating solid food too early competes with that process and dramatically increases the risk of GI distress.</p>
-          <p>For longer rides (&gt; ~5 hours), CycleFuel delays the first food item to up to 45 minutes, scaling with ride duration, to give your gut even more time to settle before the deep-effort phase begins.</p>
+        <Card>
+          <p className="text-muted-foreground">These are practical <span className="text-foreground font-medium">rules of thumb, not hard physiology</span> — individual tolerance varies a lot. Treat them as sensible defaults, try what works for you, and log how your stomach felt so the plan can learn.</p>
+        </Card>
+        <Accordion title="Why ease into eating in the first ~30 minutes?">
+          <p className="mb-2">Early in a ride your body is still ramping up — blood is shifting to working muscles and digestion takes a back seat. Many riders find a big solid item in the first half hour sits heavily, so CycleFuel holds the first solid item until then. It&apos;s a comfort guideline rather than a strict rule — drinks and gels are fine from the start.</p>
+          <p>For longer rides (up to ~5 hours) the first solid item is nudged to as late as 45 minutes, scaling with ride duration.</p>
         </Accordion>
-        <Accordion title="Why exactly 50 minutes between items?">
-          <p className="mb-2">Solid food takes 45–60 minutes to leave the stomach. Eating again before the previous item has cleared means the two compete for gut space and blood flow — a common cause of cramping and nausea at race intensity.</p>
-          <p>The 50-minute gap is the practical minimum that keeps the gut clear. It is a fixed rule, not a function of ride length or carb target.</p>
+        <Accordion title="Why space solid items out — and why gels can go closer?">
+          <p className="mb-2">A bar or real food takes roughly 45–60 minutes to clear the stomach. Stacking another on top before the first has moved on is a common cause of that heavy, sloshy feeling at intensity — so CycleFuel spaces bars and real food ~45–50 min apart.</p>
+          <p>Gels and chews are mostly fast-absorbing carbohydrate and behave more like a drink, so they can be taken closer together (~25–30 min). Set each food&apos;s <strong>type</strong> in Settings and the schedule spaces it accordingly. It&apos;s a starting point — some guts handle more, some less.</p>
         </Accordion>
         <Accordion title="Why stop eating 20 minutes before the finish?">
           <p>Solid food needs to be in your gut long enough to be digested and absorbed. An item eaten in the final 20 minutes will still be sitting in your stomach at the finish line — it contributes nothing to your energy and adds unnecessary digestive load during the hardest part of the effort.</p>
         </Accordion>
         <Accordion title="How many food items will CycleFuel schedule?">
-          <p className="mb-2">The app calculates the <strong>feed window</strong> — from the first allowed food checkpoint (30–45 min in) to the last one (20 min before finish). The slot at the window start counts, then one more every 50 minutes:</p>
-          <p className="font-mono bg-muted rounded px-2 py-1 text-xs mb-2">maxItems = floor(feedWindowMinutes ÷ 50) + 1</p>
-          <p>The first item is scheduled right at the window start, with fixed 50-minute steps after it. If you&apos;ve selected more food items than fit in the window, the extras are dropped.</p>
+          <p className="mb-2">The app works out the <strong>feed window</strong> — from the first food checkpoint (30–45 min in) to the last one (20 min before finish) — then fills it just enough to cover the carbs your drinks don&apos;t. It places the first item at the window start and steps forward by each item&apos;s own spacing (a bar ~45–50 min, a gel ~25–30 min), stopping once the carb gap is covered or the window closes.</p>
+          <p>If you&apos;ve selected more than fits, the extras stay in your pocket as backup — and a selection of gels fits more than the same number of bars.</p>
         </Accordion>
         <Accordion title="How is the carb split decided between drinks and food?">
           <p className="mb-2">CycleFuel fills carbs in this order:</p>
@@ -182,7 +208,7 @@ export default function HelpPage() {
       </Section>
 
       {/* Pre-ride */}
-      <Section emoji="🍝" title="Pre-ride carb loading">
+      <Section emoji="🍝" title="Pre-ride carb loading" id="preride">
         <Card>
           <p className="text-muted-foreground">For rides over 90 minutes, CycleFuel suggests eating <span className="text-foreground font-medium">~2 g of carbs per kg of body weight</span> in the 3–4 hours before the ride. Think oats, rice, banana or toast.</p>
         </Card>
@@ -191,11 +217,43 @@ export default function HelpPage() {
         </Accordion>
       </Section>
 
+      {/* Caffeine */}
+      <Section emoji="☕" title="Caffeine" id="caffeine">
+        <Card>
+          <p className="text-muted-foreground">Caffeine is one of the best-evidenced endurance aids there is. Toggle <span className="text-foreground font-medium">Caffeine plan</span> on a ride and CycleFuel suggests a dose based on your body weight.</p>
+        </Card>
+        <Accordion title="How much and when?">
+          <p className="mb-2">The evidence points to about <strong>3 mg per kg of body weight</strong> (≈200 mg for a 70 kg rider) taken <strong>45–60 minutes before</strong> the hard part of your ride. More isn&apos;t better — higher doses bring jitters and a racing heart without extra performance.</p>
+          <p>On rides over 3 hours a smaller top-up in the final third can lift a fading effort. Keep your whole day under roughly 6 mg/kg, and remember caffeine is individual — try it in training first.</p>
+        </Accordion>
+      </Section>
+
+      {/* Recovery */}
+      <Section emoji="🥣" title="After the ride (recovery)" id="recovery">
+        <Card>
+          <p className="text-muted-foreground">For rides of 90 minutes or more, CycleFuel suggests refuelling within the first hour: about <span className="text-foreground font-medium">1.1 g/kg of carbs plus 0.3 g/kg of protein</span> to refill glycogen and start muscle repair.</p>
+        </Card>
+        <Accordion title="Why refuel so soon?">
+          <p>Your muscles are most receptive to topping up glycogen in the hour or two after finishing, and a little protein kick-starts repair. It matters most when your next ride is soon; after an easy spin your normal meals cover it. A recovery shake, rice and chicken, or milk and a banana all work — set your weight in Settings for a personalised figure.</p>
+        </Accordion>
+      </Section>
+
       {/* Bottle refills */}
       <Section emoji="♻️" title="Bottle refills">
         <Accordion title="How does CycleFuel handle long rides?">
           <p className="mb-2">If the weather-based fluid target exceeds what fits in your bottles, CycleFuel estimates how many refills you&apos;ll need and shows a warning. For example, needing 2.5 L with 2 L of bottles means roughly one refill.</p>
           <p>Plan for a feed zone, café stop, or carry an extra bottle for rides where the target fluid exceeds your bottle capacity.</p>
+        </Accordion>
+      </Section>
+
+      {/* Gut training */}
+      <Section emoji="💪" title="Training your gut" id="gut-training">
+        <Card>
+          <p className="text-muted-foreground">Your ability to take on carbs is <span className="text-foreground font-medium">trainable</span>. The transporters that absorb carbohydrate, and your tolerance for eating while working hard, both adapt to practice. Nobody takes 90 g/hr comfortably on day one — they build up to it.</p>
+        </Card>
+        <Accordion title="How do I train it?">
+          <p className="mb-2">Start at an intake that feels easy, then nudge it up gradually on training rides — never test something new on an important day. When you log a ride as feeling right (or wanting more) with no gut trouble, CycleFuel spots it and suggests trying the next step up, in small 10 g/hr jumps through the 60–90 range.</p>
+          <p>If your stomach complains, back off a step and hold there a while. Progress, don&apos;t force — this is exactly the &quot;finding your limits&quot; process, made concrete.</p>
         </Accordion>
       </Section>
 

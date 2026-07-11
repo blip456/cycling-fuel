@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { DrinkProduct, FoodItem, FuelPlan, UserProfile } from "./types";
+import type { DrinkProduct, FoodItem, FuelPlan, SweatTest, UserProfile } from "./types";
 import { generateId } from "./utils";
 
 const DEFAULT_DRINKS: DrinkProduct[] = [
@@ -15,12 +15,13 @@ const DEFAULT_DRINKS: DrinkProduct[] = [
     mlPerServing: 500,
     carbsPerServing: 30,
     carbRatio: "1:1",
+    sodiumMgPerServing: 250,
   },
 ];
 
 const DEFAULT_FOODS: FoodItem[] = [
-  { id: "banana", name: "Banana (medium)", carbsPerServing: 25 },
-  { id: "energy-bar", name: "Energy Bar", brand: "Generic", carbsPerServing: 40 },
+  { id: "banana", name: "Banana (medium)", carbsPerServing: 25, type: "real", sodiumMg: 1 },
+  { id: "energy-bar", name: "Energy Bar", brand: "Generic", carbsPerServing: 40, type: "bar", sodiumMg: 60 },
 ];
 
 interface AppStore {
@@ -30,6 +31,7 @@ interface AppStore {
   plans: FuelPlan[];
 
   updateProfile: (update: Partial<UserProfile>) => void;
+  addSweatTest: (test: SweatTest) => void;
 
   addDrink: (drink: Omit<DrinkProduct, "id">) => void;
   updateDrink: (id: string, update: Partial<DrinkProduct>) => void;
@@ -67,6 +69,15 @@ export const useStore = create<AppStore>()(
 
       updateProfile: (update) =>
         set((s) => ({ profile: { ...s.profile, ...update } })),
+
+      addSweatTest: (test) =>
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            sweatRateMlPerHour: test.sweatRateMlPerHour,
+            sweatTests: [test, ...(s.profile.sweatTests ?? [])].slice(0, 20),
+          },
+        })),
 
       addDrink: (drink) =>
         set((s) => ({ drinks: [...s.drinks, { ...drink, id: generateId() }] })),
@@ -124,12 +135,19 @@ export const useStore = create<AppStore>()(
     {
       name: "cycling-fuel-store",
       storage: createJSONStorage(() => localStorage),
-      version: 1,
+      version: 2,
       migrate: (persisted, version) => {
         const state = persisted as Partial<AppStore>;
         if (version < 1 && state.profile) {
           // Existing users keep their carb default; intensity is new
           state.profile.defaultIntensity ??= "steady";
+        }
+        if (version < 2) {
+          // v2 adds electrolytes, food types and sweat-rate tracking.
+          // Backfill conservative defaults so existing data keeps working.
+          state.foods?.forEach((f) => {
+            if (!f.type) f.type = "bar";
+          });
         }
         return state as AppStore;
       },

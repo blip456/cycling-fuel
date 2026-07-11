@@ -1,9 +1,36 @@
 export type CarbRatio = "1:1" | "2:1" | "single";
 
-export type CarbRate = 30 | 45 | 60 | 90 | 120;
-export const CARB_RATE_OPTIONS: readonly CarbRate[] = [30, 45, 60, 90, 120];
+// Finer granularity in the 60–90 g/hr "gut training" zone so riders (and the
+// feedback loop) can nudge intake in realistic 10g steps instead of leaping
+// 60 → 90. Above 90 stays coarse (racing territory, opt-in only).
+export type CarbRate = 30 | 45 | 60 | 70 | 80 | 90 | 120;
+export const CARB_RATE_OPTIONS: readonly CarbRate[] = [30, 45, 60, 70, 80, 90, 120];
 
 export type RideIntensity = "easy" | "steady" | "hard";
+
+// Food behaves differently in the gut: fast fuel (gels/chews) empties quickly
+// and can be spaced closer together; bars and real food need a longer window.
+export type FoodType = "gel" | "chew" | "bar" | "real";
+
+// Minimum spacing (minutes) between two solid items of this type — driven by
+// how long each typically takes to clear the stomach. Fast carbs sit like a
+// drink; a bar or sandwich needs the classic ~45–50 min.
+export const FOOD_GAP_MIN: Record<FoodType, number> = {
+  gel: 25,
+  chew: 30,
+  bar: 45,
+  real: 50,
+};
+
+export const FOOD_TYPE_LABELS: Record<FoodType, string> = {
+  gel: "Gel",
+  chew: "Chew / block",
+  bar: "Bar",
+  real: "Real food",
+};
+
+// Bottle/vessel sizes: soft flasks through hydration packs.
+export const BOTTLE_SIZE_OPTIONS: readonly number[] = [250, 500, 600, 750, 1000, 1500, 2000];
 
 export interface DrinkProduct {
   id: string;
@@ -14,6 +41,8 @@ export interface DrinkProduct {
   mlPerServing: number;
   carbsPerServing: number;
   carbRatio: CarbRatio;
+  sodiumMgPerServing?: number;
+  caffeineMgPerServing?: number;
 }
 
 export interface FoodItem {
@@ -22,24 +51,43 @@ export interface FoodItem {
   brand?: string;
   flavour?: string;
   carbsPerServing: number;
+  type?: FoodType; // undefined treated as "bar" (conservative spacing)
+  sodiumMg?: number;
+  caffeineMg?: number;
 }
 
 export interface Bottle {
   id: string;
-  mlCapacity: 500 | 750 | 1000;
+  mlCapacity: number;
+}
+
+// A logged sweat-rate test: weigh in before, weigh out after, note what you
+// drank. rate = ((before − after) L + drunk L) ÷ hours.
+export interface SweatTest {
+  recordedAt: string;
+  durationMin: number;
+  weightBeforeKg: number;
+  weightAfterKg: number;
+  fluidDrunkMl: number;
+  tempC?: number;
+  sweatRateMlPerHour: number;
 }
 
 export interface UserProfile {
   weightKg?: number;
   defaultCarbsPerHour: CarbRate;
-  defaultBottleMl: 500 | 750 | 1000;
+  defaultBottleMl: number;
   defaultIntensity: RideIntensity;
+  // Personal sweat rate (ml/hr). When set, overrides the weather baseline.
+  sweatRateMlPerHour?: number;
+  sweatTests?: SweatTest[];
 }
 
 export interface WeatherData {
   tempC: number;
   description: string;
   icon: "sun" | "cloud" | "rain" | "storm" | "snow" | "fog";
+  manual?: boolean; // temperature entered by hand rather than fetched
 }
 
 export interface SelectedDrink {
@@ -67,6 +115,7 @@ export interface BottlePrep {
   scoops: number;
   waterMl: number;
   carbsTotal: number;
+  sodiumMg?: number;
 }
 
 export interface ScheduleItem {
@@ -86,6 +135,7 @@ export interface ScheduleItem {
   };
   cumulativeCarbs: number;
   note?: string;
+  refill?: boolean; // a "refill your bottles (with water)" checkpoint
 }
 
 export interface CalculatedPlan {
@@ -95,6 +145,12 @@ export interface CalculatedPlan {
   bottlePrep: BottlePrep[];
   schedule: ScheduleItem[];
   preRideNote?: string;
+  recoveryNote?: string;
+  caffeineNote?: string;
+  sodiumTargetMg?: number;
+  sodiumDeliveredMg?: number;
+  fluidPerHourMl: number;
+  fluidSource: "sweat-test" | "weather";
   warnings: string[];
 }
 
@@ -112,6 +168,7 @@ export interface FuelPlan {
   intensity?: RideIntensity;
   bottles: Bottle[];
   includeSolidFood: boolean;
+  includeCaffeine?: boolean;
   selectedDrinks: SelectedDrink[];
   selectedFoods: string[];
   result?: CalculatedPlan;

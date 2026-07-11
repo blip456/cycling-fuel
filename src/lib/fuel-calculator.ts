@@ -1,3 +1,4 @@
+import { FOOD_GAP_MIN } from "./types";
 import type {
   Bottle,
   BottlePrep,
@@ -5,6 +6,7 @@ import type {
   CarbRate,
   DrinkProduct,
   FoodItem,
+  RideIntensity,
   ScheduleItem,
   SelectedDrink,
   WeatherData,
@@ -16,19 +18,42 @@ interface CalcInputs {
   carbsPerHour: CarbRate;
   bottles: Bottle[];
   includeSolidFood: boolean;
+  includeCaffeine?: boolean;
   selectedDrinks: SelectedDrink[];
   selectedFoods: string[];
   drinks: DrinkProduct[];
   foods: FoodItem[];
   weather?: WeatherData;
   weightKg?: number;
+  intensity?: RideIntensity;
+  sweatRateMlPerHour?: number;
 }
 
-function getWeatherFluidMlPerHour(weather?: WeatherData): number {
+// Mid-range sweat sodium concentration (mg per litre of sweat). Individual
+// sweat runs anywhere from ~400 (light salty) to ~1500+ (very salty); 800 is a
+// reasonable planning midpoint for a target.
+const SWEAT_SODIUM_MG_PER_L = 800;
+
+function weatherFluidMlPerHour(weather?: WeatherData): number {
   if (!weather) return 500;
   if (weather.tempC < 15) return 400;
   if (weather.tempC < 25) return 500;
   return 650;
+}
+
+// Fluid need per hour. A logged personal sweat rate always wins over the
+// weather baseline (it's measured from *you*); we still nudge it up in real
+// heat since most sweat tests are done in cooler conditions.
+function resolveFluidPerHour(
+  sweatRateMlPerHour: number | undefined,
+  weather: WeatherData | undefined
+): { perHour: number; source: CalculatedPlan["fluidSource"] } {
+  if (sweatRateMlPerHour && sweatRateMlPerHour > 0) {
+    let ml = sweatRateMlPerHour;
+    if (weather && weather.tempC >= 25) ml = Math.round(ml * 1.1);
+    return { perHour: ml, source: "sweat-test" };
+  }
+  return { perHour: weatherFluidMlPerHour(weather), source: "weather" };
 }
 
 function getFirstDrinkMin(durationHours: number): number {
@@ -40,9 +65,14 @@ function getFirstDrinkMin(durationHours: number): number {
 
 function getCarbsHourTip(carbsPerHour: number): string {
   if (carbsPerHour <= 30) return "Easy / leisure pace. A light mix or one snack per hour covers it.";
-  if (carbsPerHour <= 60) return "Suitable for rides under 2 hours. Single carb source is fine.";
-  if (carbsPerHour <= 90) return "Ideal for hard 2–4hr rides. Mixed carb sources (glucose + fructose) improve absorption.";
+  if (carbsPerHour <= 60) return "Suitable for rides up to ~2–3 hours. A single carb source is fine.";
+  if (carbsPerHour <= 80) return "Gut-training zone. Use a glucose + fructose (2:1) mix and build up gradually.";
+  if (carbsPerHour <= 90) return "Hard 2–4hr rides. Mixed carb sources (glucose + fructose) improve absorption.";
   return "Racing intakes. Requires gut training and a 1:1 glucose:fructose ratio.";
+}
+
+function foodGap(f: FoodItem): number {
+  return FOOD_GAP_MIN[f.type ?? "bar"];
 }
 
 export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
@@ -51,8 +81,12 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   const durationHours = distance / avgSpeed;
   const durationMin = Math.round(durationHours * 60);
   const totalCarbs = Math.round(durationHours * carbsPerHour);
-  const fluidMlPerHour = getWeatherFluidMlPerHour(weather);
-  const totalFluidMl = Math.round(durationHours * fluidMlPerHour);
+  const { perHour: fluidPerHourMl, source: fluidSource } = resolveFluidPerHour(
+    inputs.sweatRateMlPerHour,
+    weather
+  );
+  const totalFluidMl = Math.round(durationHours * fluidPerHourMl);
+  const sodiumTargetMg = Math.round((totalFluidMl / 1000) * SWEAT_SODIUM_MG_PER_L);
 
   const activeDrinks = inputs.selectedDrinks
     .map((sd) => ({
@@ -78,13 +112,16 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
         scoops: 0,
         waterMl: bottle.mlCapacity,
         carbsTotal: 0,
+        sodiumMg: 0,
       };
     }
 
     const { product, sd } = drinkEntry;
     const scoops = sd.scoopsOverride ?? product.scoopsRecommended;
     const scaledScoops = Math.round((bottle.mlCapacity / product.mlPerServing) * scoops);
-    const carbsTotal = Math.round((scaledScoops / product.scoopsRecommended) * product.carbsPerServing);
+    const servingRatio = scaledScoops / product.scoopsRecommended;
+    const carbsTotal = Math.round(servingRatio * product.carbsPerServing);
+    const sodiumMg = Math.round(servingRatio * (product.sodiumMgPerServing ?? 0));
 
     return {
       bottleId: bottle.id,
@@ -95,53 +132,51 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       scoops: scaledScoops,
       waterMl: bottle.mlCapacity,
       carbsTotal,
+      sodiumMg,
     };
   });
 
   // --- Drink carbs the ride will actually deliver ---
-  // Only the bottles you mix tonight count. On rides needing refills, assume
-  // refills are WATER (that's what feed zones reliably offer) — solid food
-  // must cover the remaining carbs. Crediting phantom refill mix here used to
-  // silently displace all food on long rides.
+  // Only the bottles you mix tonight carry carbs. On rides needing refills,
+  // assume refills are WATER (that's what feed zones reliably offer) — solid
+  // food must cover the remaining carbs.
   const initialBottleMl = bottles.reduce((sum, b) => sum + b.mlCapacity, 0);
   const initialDrinkCarbs = bottlePrep.reduce((sum, b) => sum + b.carbsTotal, 0);
+  const initialDrinkSodium = bottlePrep.reduce((sum, b) => sum + (b.sodiumMg ?? 0), 0);
   const bottleSets = initialBottleMl > 0 ? totalFluidMl / initialBottleMl : 1;
   // If bottles hold more than the ride needs, only the consumed share counts
   const consumedShare = Math.min(bottleSets, 1);
   const fullRideDrinkCarbs = Math.round(initialDrinkCarbs * consumedShare);
 
   // --- Solid food: fills only the remaining carb gap ---
-  // Science: solid food every ~50 min is realistic. More frequent causes GI stress.
-  // Feed window starts at 30-45 min (body needs warmup) and ends 20 min before finish.
   const foodCarbsGap = Math.max(0, totalCarbs - fullRideDrinkCarbs);
 
-  // feedStartMin must be at least 30 min — body needs warmup before solid food
+  // Feed window: warmup at the start, cutoff 20 min before finish.
   const feedStartMin = Math.max(30, Math.min(45, Math.round(durationMin * 0.15)));
   const feedEndMin = durationMin - 20;
-  const feedWindowMin = feedEndMin - feedStartMin;
 
-  // One solid item per 50 minutes is the ceiling (science-backed realistic maximum).
-  // The slot at the window start counts too, hence +1.
-  const maxFoodItems = feedWindowMin < 0 ? 0 : Math.floor(feedWindowMin / 50) + 1;
-
-  let foodItemCount = 0;
-  if (includeSolidFood && activeFoods.length > 0 && foodCarbsGap > 5) {
-    const avgFoodCarbs =
-      activeFoods.reduce((s, f) => s + f.carbsPerServing, 0) / activeFoods.length;
-    const itemsNeededForGap = Math.ceil(foodCarbsGap / avgFoodCarbs);
-    foodItemCount = Math.min(itemsNeededForGap, maxFoodItems);
+  // Place food sequentially. Each item's spacing depends on its OWN type — a
+  // gel clears fast and can be followed sooner than a bar or real food.
+  const foodEvents: { timeMin: number; food: FoodItem }[] = [];
+  if (includeSolidFood && activeFoods.length > 0 && foodCarbsGap > 5 && feedEndMin >= feedStartMin) {
+    let t = feedStartMin;
+    let carbsPlaced = 0;
+    let i = 0;
+    while (t <= feedEndMin && carbsPlaced < foodCarbsGap && i < 40) {
+      const food = activeFoods[i % activeFoods.length];
+      foodEvents.push({ timeMin: Math.round(t), food });
+      carbsPlaced += food.carbsPerServing;
+      t += foodGap(food);
+      i++;
+    }
   }
-
-  // First item goes at the window start (~30-45 min in), then fixed 50-min steps
-  const foodEventTimes: number[] = [];
-  for (let i = 0; i < foodItemCount; i++) {
-    foodEventTimes.push(feedStartMin + i * 50);
-  }
+  const foodSodiumDelivered = foodEvents.reduce((s, e) => s + (e.food.sodiumMg ?? 0), 0);
 
   // --- Build feeding schedule ---
   const firstDrinkMin = getFirstDrinkMin(durationHours);
   const schedule: ScheduleItem[] = [];
   let cumulativeCarbs = 0;
+  let refillsNeeded = 0;
 
   if (firstDrinkMin === Infinity) {
     // Very short ride: water only
@@ -160,13 +195,15 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     }
 
     // Merge a food event into a drink stop only when it's genuinely close
-    // (≤5 min). Snapping further would distort the 50-min food spacing —
-    // distant events get their own schedule row at the exact time instead.
+    // (≤5 min). Distant events get their own schedule row at the exact time.
     const FOOD_MERGE_TOLERANCE_MIN = 5;
     const foodByInterval = new Map<number, FoodItem>();
     const standaloneFoodEvents: { timeMin: number; food: FoodItem }[] = [];
-    foodEventTimes.forEach((foodTime, i) => {
-      const food = activeFoods[i % activeFoods.length];
+    foodEvents.forEach(({ timeMin: foodTime, food }) => {
+      if (drinkIntervals.length === 0) {
+        standaloneFoodEvents.push({ timeMin: foodTime, food });
+        return;
+      }
       const nearest = drinkIntervals.reduce((best, t) =>
         Math.abs(t - foodTime) < Math.abs(best - foodTime) ? t : best
       );
@@ -177,95 +214,98 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       }
     });
 
-    // Sip-based fluid distribution (1 sip = 50ml, science-backed mouthful size).
-    // Pace consumption to the weather-based need, not to bottle capacity —
-    // anything beyond the need stays in the bottles as reserve.
+    // Sip-based fluid distribution (1 sip = 50ml). Crucially, pace to the
+    // ride's fluid NEED (totalFluidMl), NOT to bottle capacity. When the need
+    // exceeds what the bottles hold, the extra sips come from water refills and
+    // an explicit "refill" checkpoint is dropped into the schedule.
     const SIP_ML = 50;
-    const totalBottleMl = bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
-    const consumedMl = Math.min(totalFluidMl, totalBottleMl);
-    const totalSips = Math.round(consumedMl / SIP_ML);
-    const capacitySipsPerBottle = bottlePrep.map((b) => Math.round(b.mlCapacity / SIP_ML));
-    // Consumed sips fill bottles in order; only the last bottle in use stays partial
-    let sipsToAllocate = totalSips;
-    const sipsPerBottle = capacitySipsPerBottle.map((cap) => {
-      const take = Math.min(cap, sipsToAllocate);
-      sipsToAllocate -= take;
-      return take;
-    });
-    const remainingBottleSips = [...sipsPerBottle];
-    // FIX 3: running-total carb tracking per bottle eliminates per-sip rounding drift.
-    // carbsAssigned[i] tracks how many grams have been attributed to bottle i so far.
-    // Each chunk's carbs = round(sipsAfter/totalSips × carbsTotal) - carbsAssigned[i]
-    // so the last chunk always brings the bottle's total to exactly carbsTotal.
-    const carbsAssigned = new Array(bottlePrep.length).fill(0);
-    let currentBottleIdx = 0;
-    let cumulativeSipsAssigned = 0;
+    const capSipsPerBottle = bottlePrep.map((b) => Math.max(0, Math.round(b.mlCapacity / SIP_ML)));
+    const totalCapSips = capSipsPerBottle.reduce((a, b) => a + b, 0); // one full set of bottles
+    const totalSips = Math.max(0, Math.round(totalFluidMl / SIP_ML));
+    refillsNeeded = totalCapSips > 0 ? Math.max(0, Math.ceil(totalSips / totalCapSips) - 1) : 0;
+
+    // Carbs delivered by the first `n` sips. Only the first set of bottles
+    // carries the mix; every refill after that is water (0 carbs).
+    const carbsForMixedSips = (n: number): number => {
+      let carbs = 0;
+      let remaining = Math.min(n, totalCapSips);
+      for (let b = 0; b < bottlePrep.length && remaining > 0; b++) {
+        const cap = capSipsPerBottle[b];
+        if (cap <= 0) continue;
+        const drawn = Math.min(cap, remaining);
+        carbs += Math.round((drawn / cap) * bottlePrep[b].carbsTotal);
+        remaining -= drawn;
+      }
+      return carbs;
+    };
+
+    // Which bottle a 0-based sip comes from, and whether it's water (either a
+    // refilled set, or a bottle that was water-only to begin with).
+    const sipSource = (i: number): { bottleIndex: number; isWater: boolean } => {
+      if (totalCapSips <= 0) return { bottleIndex: 1, isWater: true };
+      const setNo = Math.floor(i / totalCapSips);
+      let pos = i % totalCapSips;
+      for (let b = 0; b < bottlePrep.length; b++) {
+        const cap = capSipsPerBottle[b];
+        if (pos < cap) {
+          const bottle = bottlePrep[b];
+          return { bottleIndex: bottle.bottleIndex, isWater: setNo >= 1 || bottle.carbsTotal <= 0 };
+        }
+        pos -= cap;
+      }
+      const last = bottlePrep[bottlePrep.length - 1];
+      return { bottleIndex: last?.bottleIndex ?? 1, isWater: true };
+    };
+
+    const bottleDisplayName = (bottleIndex: number, isWater: boolean): string => {
+      if (isWater) return "Water";
+      const b = bottlePrep.find((x) => x.bottleIndex === bottleIndex);
+      if (!b || b.drinkName === "Water") return "Water";
+      return b.drinkName.split(" (")[0];
+    };
+
+    let cumSips = 0;
+    let carbsSoFar = 0;
+    const intervalCum: { timeMin: number; cumEnd: number }[] = [];
     const rows: ScheduleItem[] = [];
 
     drinkIntervals.forEach((timeMin, idx) => {
       const km = Math.round((timeMin / 60) * avgSpeed);
       const food = foodByInterval.get(timeMin) ?? null;
 
-      // Advance past empty bottles
-      while (currentBottleIdx < bottlePrep.length - 1 && remainingBottleSips[currentBottleIdx] <= 0) {
-        currentBottleIdx++;
-      }
-
-      // Cumulative rounding: how many sips should have been drunk by end of this interval?
       const targetCumSips =
         drinkIntervals.length > 0
           ? Math.round((totalSips * (idx + 1)) / drinkIntervals.length)
           : 0;
-      const sipsNeeded = Math.max(0, targetCumSips - cumulativeSipsAssigned);
-
-      // Assign sips — may span across bottle boundary
-      let sipsLeft = sipsNeeded;
-      let intervalCarbs = 0;
-      let bottleFinished = false;
-      const startBottleIdx = currentBottleIdx;
-
-      while (sipsLeft > 0 && currentBottleIdx < bottlePrep.length) {
-        const fromThisBottle = Math.min(sipsLeft, remainingBottleSips[currentBottleIdx]);
-        if (fromThisBottle > 0) {
-          const bi = currentBottleIdx;
-          const b = bottlePrep[bi];
-          const sipsDrunkBefore = sipsPerBottle[bi] - remainingBottleSips[bi];
-          const sipsDrunkAfter = sipsDrunkBefore + fromThisBottle;
-          // Carbs scale with the share of bottle CAPACITY drunk — a bottle
-          // only partially emptied delivers only that share of its mix.
-          const targetCarbsAfter =
-            capacitySipsPerBottle[bi] > 0
-              ? Math.round((sipsDrunkAfter / capacitySipsPerBottle[bi]) * b.carbsTotal)
-              : 0;
-          const chunkCarbs = targetCarbsAfter - carbsAssigned[bi];
-          carbsAssigned[bi] = targetCarbsAfter;
-          intervalCarbs += chunkCarbs;
-          remainingBottleSips[bi] -= fromThisBottle;
-          sipsLeft -= fromThisBottle;
-        }
-        if (remainingBottleSips[currentBottleIdx] <= 0 && currentBottleIdx < bottlePrep.length - 1) {
-          bottleFinished = true;
-          currentBottleIdx++;
-        } else {
-          break;
-        }
-      }
-
-      const actualSips = sipsNeeded - sipsLeft;
-      cumulativeSipsAssigned += actualSips;
+      const sips = Math.max(0, targetCumSips - cumSips);
 
       let drinkInfo: ScheduleItem["drink"] | undefined;
-      if (actualSips > 0 && bottlePrep.length > 0) {
-        const b = bottlePrep[startBottleIdx];
+      if (sips > 0 && bottlePrep.length > 0 && totalCapSips > 0) {
+        const startIdx = cumSips; // 0-based first sip of this interval
+        const endIdx = cumSips + sips; // exclusive
+
+        const carbsAfter = carbsForMixedSips(endIdx);
+        const intervalCarbs = carbsAfter - carbsSoFar;
+        carbsSoFar = carbsAfter;
+
+        const start = sipSource(startIdx);
+        const end = sipSource(endIdx - 1);
+        // "finished" only within the first (mixed) set — moving to a new bottle
+        const bottleFinished =
+          Math.floor((endIdx - 1) / totalCapSips) === 0 && start.bottleIndex !== end.bottleIndex;
+
         drinkInfo = {
-          bottleIndex: b.bottleIndex,
-          drinkName: b.drinkName === "Water" ? "Water" : b.drinkName.split(" (")[0],
-          mlAmount: actualSips * SIP_ML,
-          sips: actualSips,
+          bottleIndex: start.bottleIndex,
+          drinkName: bottleDisplayName(start.bottleIndex, start.isWater),
+          mlAmount: sips * SIP_ML,
+          sips,
           carbs: intervalCarbs,
           ...(bottleFinished ? { bottleFinished: true } : {}),
         };
       }
+
+      cumSips += sips;
+      intervalCum.push({ timeMin, cumEnd: cumSips });
 
       rows.push({
         timeMin,
@@ -286,7 +326,29 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       });
     }
 
-    rows.sort((a, b) => a.timeMin - b.timeMin);
+    // Refill checkpoints — one each time a full set of bottles is emptied.
+    // Place each at the interval where cumulative drinking reaches that set's
+    // capacity, and keep them on distinct (increasing) intervals.
+    if (totalCapSips > 0 && refillsNeeded > 0) {
+      let lastIdx = -1;
+      for (let k = 1; k <= refillsNeeded; k++) {
+        const threshold = k * totalCapSips;
+        let idx = intervalCum.findIndex((c, i) => i > lastIdx && c.cumEnd >= threshold);
+        if (idx === -1) idx = intervalCum.length - 1;
+        if (idx < 0) break;
+        lastIdx = idx;
+        const timeMin = intervalCum[idx].timeMin;
+        rows.push({
+          timeMin,
+          km: Math.round((timeMin / 60) * avgSpeed),
+          cumulativeCarbs: 0,
+          refill: true,
+          note: `Refill bottles — assume water (~${(initialBottleMl / 1000).toFixed(1)}L per top-up)`,
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.timeMin - b.timeMin || (a.refill ? 1 : 0) - (b.refill ? 1 : 0));
     for (const row of rows) {
       cumulativeCarbs += (row.drink?.carbs ?? 0) + (row.food?.carbs ?? 0);
       row.cumulativeCarbs = cumulativeCarbs;
@@ -294,11 +356,14 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     }
   }
 
+  const drinkSodiumDelivered = Math.round(initialDrinkSodium * consumedShare);
+  const sodiumDeliveredMg = drinkSodiumDelivered + foodSodiumDelivered;
+
   // --- Warnings ---
   const warnings: string[] = [];
   if (carbsPerHour > 60 && activeDrinks.some((ad) => ad.product.carbRatio === "single")) {
     warnings.push(
-      "You're targeting >60g carbs/hr with a single-source carb drink. Consider a drink with glucose + fructose (1:1 or 2:1 ratio) to avoid GI distress."
+      "You're targeting >60g carbs/hr with a single-source carb drink. Consider a drink with glucose + fructose (2:1 or 1:1 ratio) to avoid GI distress."
     );
   }
   if (carbsPerHour >= 120 && activeDrinks.length > 0 &&
@@ -312,16 +377,23 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       `Hot conditions (${weather.tempC}°C) — increase fluid intake. Make sure all bottles are full.`
     );
   }
-  if (bottleSets > 1.5) {
-    const refills = Math.ceil(bottleSets) - 1;
+  if (refillsNeeded > 0) {
     warnings.push(
-      `This ride requires ~${refills} bottle refill${refills > 1 ? "s" : ""}. The plan assumes refills are water — carry extra powder if you want carbs in them.`
+      `This ride needs ~${refillsNeeded} bottle refill${refillsNeeded > 1 ? "s" : ""}. The schedule paces you to your full ${totalFluidMl}ml fluid target and marks refill points — plan for a tap, feed zone or café. Refills are assumed to be water; carry extra powder if you want carbs in them.`
+    );
+  }
+  // Electrolytes: flag when the ride is long/hot enough to matter and the plan
+  // barely replaces any sodium.
+  if ((durationHours >= 2 || (weather && weather.tempC > 25)) &&
+      sodiumTargetMg >= 500 && sodiumDeliveredMg < sodiumTargetMg * 0.5) {
+    warnings.push(
+      `Low on sodium: this ride loses ~${sodiumTargetMg}mg via sweat but your plan replaces only ~${sodiumDeliveredMg}mg. Add an electrolyte mix or salty food — sodium helps you absorb both fluid and carbs, and wards off cramping on long/hot days.`
     );
   }
   const leftoverMl = initialBottleMl - totalFluidMl;
   if (leftoverMl >= 250 && durationHours >= 1) {
     warnings.push(
-      `You're carrying ~${Math.round(leftoverMl / 50) * 50}ml more than this ride needs. The schedule paces you to ${fluidMlPerHour}ml/hr — the rest stays in your bottles as reserve.`
+      `You're carrying ~${Math.round(leftoverMl / 50) * 50}ml more than this ride needs. The schedule paces you to ${fluidPerHourMl}ml/hr — the rest stays in your bottles as reserve.`
     );
   }
   if (fullRideDrinkCarbs < totalCarbs * 0.5 && !includeSolidFood) {
@@ -330,15 +402,34 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     );
   }
 
-  // --- Pre-ride note ---
+  // --- Pre-ride, recovery & caffeine notes ---
   let preRideNote: string | undefined;
+  let recoveryNote: string | undefined;
+  let caffeineNote: string | undefined;
   if (weightKg && durationHours >= 1.5) {
     const carbLoadG = Math.round(weightKg * 2);
     preRideNote = `Pre-ride (3–4hrs before): eat ~${carbLoadG}g carbs (2g per kg body weight). Think oats, rice, banana, toast.`;
+
+    const recCarb = Math.round(weightKg * 1.1);
+    const recProtein = Math.round(weightKg * 0.3);
+    recoveryNote = `Within 60 min of finishing: ~${recCarb}g carbs + ~${recProtein}g protein (≈1.1g/kg carbs, 0.3g/kg protein) to refill glycogen and start repair. A recovery shake, rice + chicken, or milk + banana all do the job.`;
+  }
+  if (inputs.includeCaffeine) {
+    if (weightKg) {
+      const dose = Math.round(weightKg * 3);
+      const coffee = dose < 120 ? "about one mug of coffee" : "one to two mugs of coffee";
+      if (durationHours >= 3) {
+        const second = Math.round(weightKg * 1.5);
+        caffeineNote = `Caffeine: ~${dose}mg (3mg/kg, ${coffee}) 45–60 min before the start. On a ride this long a second ~${second}mg hit in the final third can lift a fading effort. Keep your day's total under ~6mg/kg.`;
+      } else {
+        caffeineNote = `Caffeine: ~${dose}mg (3mg/kg, ${coffee}) 45–60 min before you start. More isn't better — 3mg/kg is the evidence-based sweet spot.`;
+      }
+    } else {
+      caffeineNote = `Caffeine: ~3mg per kg body weight, 45–60 min before the start (set your weight in Settings for an exact figure). More isn't better — 3mg/kg is the sweet spot.`;
+    }
   }
 
   // What the schedule actually delivers: drink carbs consumed + food eaten.
-  // Running-total rounding per bottle means this is drift-free.
   const actualCarbs = schedule.reduce(
     (sum, s) => sum + (s.drink?.carbs ?? 0) + (s.food?.carbs ?? 0),
     0
@@ -351,6 +442,12 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     bottlePrep,
     schedule,
     preRideNote,
+    recoveryNote,
+    caffeineNote,
+    sodiumTargetMg,
+    sodiumDeliveredMg,
+    fluidPerHourMl,
+    fluidSource,
     warnings,
   };
 }
