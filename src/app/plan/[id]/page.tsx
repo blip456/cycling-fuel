@@ -290,18 +290,32 @@ export default function PlanResultPage() {
     });
   }, [editBottles, drinks]);
 
-  // Live schedule: recalculate drink carbs from updated bottles
+  // Live schedule: recompute drink carbs from the edited bottles. Only the
+  // first `mlCapacity` of each bottle carries the mix — anything drunk beyond
+  // that is a water refill (0 carbs). Without this cap, refill rides (fluid
+  // need > bottle capacity) credit the refills and wildly inflate drink carbs.
   const liveSchedule = useMemo(() => {
     let cum = 0;
+    const drawnMl: Record<number, number> = {};
+    const creditedCarbs: Record<number, number> = {};
     return editItems.map((item) => {
       let drinkCarbs = 0;
       let updatedDrink = item.drink;
       if (item.drink) {
         const bottle = liveBottles.find((b) => b.bottleIndex === item.drink!.bottleIndex);
         if (bottle) {
-          drinkCarbs = bottle.carbsTotal > 0
-            ? Math.round((item.drink.mlAmount / bottle.mlCapacity) * bottle.carbsTotal)
-            : 0;
+          const bi = item.drink.bottleIndex;
+          const cap = bottle.mlCapacity;
+          const before = drawnMl[bi] ?? 0;
+          const after = before + item.drink.mlAmount;
+          drawnMl[bi] = after;
+          if (bottle.carbsTotal > 0 && cap > 0) {
+            // Carbs delivered scale with the share of the bottle's OWN capacity
+            // consumed, capped at 100% — telescoped for drift-free totals.
+            const carbsAfter = Math.round((Math.min(after, cap) / cap) * bottle.carbsTotal);
+            drinkCarbs = Math.max(0, carbsAfter - (creditedCarbs[bi] ?? 0));
+            creditedCarbs[bi] = carbsAfter;
+          }
           updatedDrink = {
             ...item.drink,
             carbs: drinkCarbs,
@@ -519,6 +533,15 @@ export default function PlanResultPage() {
   const displayCarbsPerHour = editMode ? editCarbsPerHour : plan.carbsPerHour;
   const targetCarbs = Math.round(result.durationHours * displayCarbsPerHour);
   const carbsDiff = displayTotalCarbs - targetCarbs;
+
+  // --- Breakdown stats (live in edit mode too) ---
+  const drinkCarbs = displaySchedule.reduce((sum, s) => sum + (s.drink?.carbs ?? 0), 0);
+  const foodCarbs = displaySchedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
+  const bottleCount = displayBottles.length;
+  const foodItemsCount = displaySchedule.filter((s) => s.food).length;
+  const carbSplitTotal = drinkCarbs + foodCarbs;
+  const drinkPct = carbSplitTotal > 0 ? Math.round((drinkCarbs / carbSplitTotal) * 100) : 0;
+  const foodPct = carbSplitTotal > 0 ? 100 - drinkPct : 0;
   const structuralChanges = editMode && (
     editCarbsPerHour !== plan.carbsPerHour ||
     editPlanBottles.length !== plan.bottles.length ||
@@ -652,6 +675,64 @@ export default function PlanResultPage() {
             </div>
           </div>
         </div>
+
+        {/* Breakdown — bottles, food items, and the drink/food carb split */}
+        <section>
+          <h2 className="eyebrow text-muted-foreground mb-3">At a glance</h2>
+          <div className="bg-card border border-border rounded-3xl p-5">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+              <div>
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                  <Droplets className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span className="text-xs">Bottles</span>
+                </div>
+                <p className="font-display text-2xl font-semibold text-foreground">{bottleCount}</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                  <Bike className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span className="text-xs">Food items</span>
+                </div>
+                <p className="font-display text-2xl font-semibold text-foreground">{foodItemsCount}</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                  <span className="h-2 w-2 rounded-full bg-primary shrink-0" aria-hidden="true" />
+                  <span className="text-xs">From drinks</span>
+                </div>
+                <p className="font-display text-2xl font-semibold text-foreground">
+                  {drinkCarbs}<span className="text-sm font-normal text-muted-foreground">g</span>
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                  <span className="h-2 w-2 rounded-full bg-accent shrink-0" aria-hidden="true" />
+                  <span className="text-xs">From food</span>
+                </div>
+                <p className="font-display text-2xl font-semibold text-foreground">
+                  {foodCarbs}<span className="text-sm font-normal text-muted-foreground">g</span>
+                </p>
+              </div>
+            </div>
+
+            {carbSplitTotal > 0 && (
+              <div className="mt-5">
+                <div
+                  className="flex h-2.5 rounded-full overflow-hidden bg-muted"
+                  role="img"
+                  aria-label={`Carbs: ${drinkPct}% from drinks, ${foodPct}% from food`}
+                >
+                  {drinkPct > 0 && <div className="bg-primary" style={{ width: `${drinkPct}%` }} />}
+                  {foodPct > 0 && <div className="bg-accent" style={{ width: `${foodPct}%` }} />}
+                </div>
+                <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
+                  <span>Drinks {drinkPct}%</span>
+                  <span>Food {foodPct}%</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* Pre-ride note */}
         {result.preRideNote && (
