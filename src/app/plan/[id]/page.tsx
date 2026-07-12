@@ -290,18 +290,32 @@ export default function PlanResultPage() {
     });
   }, [editBottles, drinks]);
 
-  // Live schedule: recalculate drink carbs from updated bottles
+  // Live schedule: recompute drink carbs from the edited bottles. Only the
+  // first `mlCapacity` of each bottle carries the mix — anything drunk beyond
+  // that is a water refill (0 carbs). Without this cap, refill rides (fluid
+  // need > bottle capacity) credit the refills and wildly inflate drink carbs.
   const liveSchedule = useMemo(() => {
     let cum = 0;
+    const drawnMl: Record<number, number> = {};
+    const creditedCarbs: Record<number, number> = {};
     return editItems.map((item) => {
       let drinkCarbs = 0;
       let updatedDrink = item.drink;
       if (item.drink) {
         const bottle = liveBottles.find((b) => b.bottleIndex === item.drink!.bottleIndex);
         if (bottle) {
-          drinkCarbs = bottle.carbsTotal > 0
-            ? Math.round((item.drink.mlAmount / bottle.mlCapacity) * bottle.carbsTotal)
-            : 0;
+          const bi = item.drink.bottleIndex;
+          const cap = bottle.mlCapacity;
+          const before = drawnMl[bi] ?? 0;
+          const after = before + item.drink.mlAmount;
+          drawnMl[bi] = after;
+          if (bottle.carbsTotal > 0 && cap > 0) {
+            // Carbs delivered scale with the share of the bottle's OWN capacity
+            // consumed, capped at 100% — telescoped for drift-free totals.
+            const carbsAfter = Math.round((Math.min(after, cap) / cap) * bottle.carbsTotal);
+            drinkCarbs = Math.max(0, carbsAfter - (creditedCarbs[bi] ?? 0));
+            creditedCarbs[bi] = carbsAfter;
+          }
           updatedDrink = {
             ...item.drink,
             carbs: drinkCarbs,
