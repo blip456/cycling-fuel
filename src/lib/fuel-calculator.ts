@@ -12,6 +12,16 @@ import type {
   WeatherData,
 } from "./types";
 
+// Explicit per-bottle prep — used when recalculating from an edited plan where
+// the rider has set each bottle's drink and scoops individually (finer than the
+// wizard's product-level model). When present it drives bottlePrep directly.
+export interface BottleSetup {
+  bottleId?: string;
+  mlCapacity: number;
+  drinkProductId: string | null;
+  scoops: number;
+}
+
 interface CalcInputs {
   distance: number;
   avgSpeed: number;
@@ -27,6 +37,9 @@ interface CalcInputs {
   weightKg?: number;
   intensity?: RideIntensity;
   sweatRateMlPerHour?: number;
+  // When provided, bottlePrep is built from this exact setup (drink + scoops
+  // per bottle) instead of cycling selectedDrinks across `bottles`.
+  bottleSetup?: BottleSetup[];
 }
 
 // Mid-range sweat sodium concentration (mg per litre of sweat). Individual
@@ -100,47 +113,67 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     .filter((f): f is FoodItem => !!f);
 
   // --- Bottle prep (what to mix tonight) ---
-  const bottlePrep: BottlePrep[] = bottles.map((bottle, i) => {
-    const drinkEntry = activeDrinks.length > 0 ? activeDrinks[i % activeDrinks.length] : null;
-
-    if (!drinkEntry) {
-      return {
-        bottleId: bottle.id,
-        bottleIndex: i + 1,
-        mlCapacity: bottle.mlCapacity,
-        drinkName: "Water",
-        scoops: 0,
-        waterMl: bottle.mlCapacity,
-        carbsTotal: 0,
-        sodiumMg: 0,
-      };
-    }
-
-    const { product, sd } = drinkEntry;
-    const scoops = sd.scoopsOverride ?? product.scoopsRecommended;
-    const scaledScoops = Math.round((bottle.mlCapacity / product.mlPerServing) * scoops);
-    const servingRatio = scaledScoops / product.scoopsRecommended;
-    const carbsTotal = Math.round(servingRatio * product.carbsPerServing);
-    const sodiumMg = Math.round(servingRatio * (product.sodiumMgPerServing ?? 0));
-
-    return {
-      bottleId: bottle.id,
-      bottleIndex: i + 1,
-      mlCapacity: bottle.mlCapacity,
-      drinkProductId: product.id,
-      drinkName: product.flavour ? `${product.name} (${product.flavour})` : product.name,
-      scoops: scaledScoops,
-      waterMl: bottle.mlCapacity,
-      carbsTotal,
-      sodiumMg,
-    };
+  // Two ways to build it: an explicit per-bottle setup (from the plan editor,
+  // where each bottle already has a chosen drink + exact scoops), or the
+  // wizard model (cycle the selected drinks across the bottles).
+  const waterBottle = (id: string | undefined, i: number, mlCapacity: number): BottlePrep => ({
+    bottleId: id ?? `b${i + 1}`,
+    bottleIndex: i + 1,
+    mlCapacity,
+    drinkName: "Water",
+    scoops: 0,
+    waterMl: mlCapacity,
+    carbsTotal: 0,
+    sodiumMg: 0,
   });
+
+  const bottlePrep: BottlePrep[] = inputs.bottleSetup
+    ? inputs.bottleSetup.map((b, i) => {
+        const product = b.drinkProductId
+          ? inputs.drinks.find((d) => d.id === b.drinkProductId)
+          : undefined;
+        if (!product || b.scoops <= 0) return waterBottle(b.bottleId, i, b.mlCapacity);
+        // scoops here are already scaled to the bottle (editor works per bottle)
+        const servingRatio = b.scoops / product.scoopsRecommended;
+        return {
+          bottleId: b.bottleId ?? `b${i + 1}`,
+          bottleIndex: i + 1,
+          mlCapacity: b.mlCapacity,
+          drinkProductId: product.id,
+          drinkName: product.flavour ? `${product.name} (${product.flavour})` : product.name,
+          scoops: b.scoops,
+          waterMl: b.mlCapacity,
+          carbsTotal: Math.round(servingRatio * product.carbsPerServing),
+          sodiumMg: Math.round(servingRatio * (product.sodiumMgPerServing ?? 0)),
+        };
+      })
+    : bottles.map((bottle, i) => {
+        const drinkEntry = activeDrinks.length > 0 ? activeDrinks[i % activeDrinks.length] : null;
+        if (!drinkEntry) return waterBottle(bottle.id, i, bottle.mlCapacity);
+
+        const { product, sd } = drinkEntry;
+        const scoops = sd.scoopsOverride ?? product.scoopsRecommended;
+        const scaledScoops = Math.round((bottle.mlCapacity / product.mlPerServing) * scoops);
+        const servingRatio = scaledScoops / product.scoopsRecommended;
+
+        return {
+          bottleId: bottle.id,
+          bottleIndex: i + 1,
+          mlCapacity: bottle.mlCapacity,
+          drinkProductId: product.id,
+          drinkName: product.flavour ? `${product.name} (${product.flavour})` : product.name,
+          scoops: scaledScoops,
+          waterMl: bottle.mlCapacity,
+          carbsTotal: Math.round(servingRatio * product.carbsPerServing),
+          sodiumMg: Math.round(servingRatio * (product.sodiumMgPerServing ?? 0)),
+        };
+      });
 
   // --- Drink carbs the ride will actually deliver ---
   // Only the bottles you mix tonight carry carbs. On rides needing refills,
   // assume refills are WATER (that's what feed zones reliably offer) — solid
   // food must cover the remaining carbs.
-  const initialBottleMl = bottles.reduce((sum, b) => sum + b.mlCapacity, 0);
+  const initialBottleMl = bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
   const initialDrinkCarbs = bottlePrep.reduce((sum, b) => sum + b.carbsTotal, 0);
   const initialDrinkSodium = bottlePrep.reduce((sum, b) => sum + (b.sodiumMg ?? 0), 0);
   const bottleSets = initialBottleMl > 0 ? totalFluidMl / initialBottleMl : 1;

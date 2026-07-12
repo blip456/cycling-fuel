@@ -21,8 +21,8 @@ export function BottomNav() {
       aria-label="Primary"
       className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none"
     >
-      <div className="max-w-lg mx-auto px-6 pb-[calc(env(safe-area-inset-bottom)+0.85rem)]">
-        <div className="pointer-events-auto flex items-center justify-around gap-1 rounded-full border border-border bg-card/85 backdrop-blur-md shadow-lg px-2.5 py-2">
+      <div className="max-w-lg mx-auto px-5 pb-[calc(env(safe-area-inset-bottom)+0.85rem)]">
+        <div className="pointer-events-auto flex items-center justify-around gap-1 rounded-full border border-white/50 bg-card/60 backdrop-blur-xl backdrop-saturate-150 shadow-lg ring-1 ring-inset ring-white/30 px-2.5 py-2">
           {navItems.map(({ href, label, Icon }) => {
             const isActive =
               pathname === href ||

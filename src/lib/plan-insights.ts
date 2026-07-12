@@ -110,6 +110,19 @@ export function generateInsights(
     });
   }
 
+  // ── 2b. Plan delivers well ABOVE target — usually a carb-heavy bottle mix ──
+  const carbOvershoot = actualCarbs - targetCarbs;
+  if (durationH >= 1 && carbOvershoot > Math.max(20, targetCarbs * 0.15)) {
+    insights.push({
+      id: "carb-overshoot",
+      level: "suggestion",
+      title: `Plan delivers ${carbOvershoot}g over your ${targetCarbs}g target`,
+      detail:
+        `Your bottles carry about ${Math.round(actualCarbs / durationH)}g/hr — more than your ${plan.carbsPerHour}g/hr goal, so drinks alone cover the target and no solid food is scheduled. ` +
+        `Tap Edit, lower the scoops, then Recalculate to hit ${targetCarbs}g and make room for food — or keep it as a buffer on a big day.`,
+    });
+  }
+
   // ── 3. No solid food on a long ride ─────────────────────────────────
   if (durationH >= 2.5 && !plan.includeSolidFood) {
     insights.push({
