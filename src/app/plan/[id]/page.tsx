@@ -519,6 +519,15 @@ export default function PlanResultPage() {
   const displayCarbsPerHour = editMode ? editCarbsPerHour : plan.carbsPerHour;
   const targetCarbs = Math.round(result.durationHours * displayCarbsPerHour);
   const carbsDiff = displayTotalCarbs - targetCarbs;
+
+  // --- Breakdown stats (live in edit mode too) ---
+  const drinkCarbs = displaySchedule.reduce((sum, s) => sum + (s.drink?.carbs ?? 0), 0);
+  const foodCarbs = displaySchedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
+  const bottleCount = displayBottles.length;
+  const foodItemsCount = displaySchedule.filter((s) => s.food).length;
+  const carbSplitTotal = drinkCarbs + foodCarbs;
+  const drinkPct = carbSplitTotal > 0 ? Math.round((drinkCarbs / carbSplitTotal) * 100) : 0;
+  const foodPct = carbSplitTotal > 0 ? 100 - drinkPct : 0;
   const structuralChanges = editMode && (
     editCarbsPerHour !== plan.carbsPerHour ||
     editPlanBottles.length !== plan.bottles.length ||
@@ -652,6 +661,64 @@ export default function PlanResultPage() {
             </div>
           </div>
         </div>
+
+        {/* Breakdown — bottles, food items, and the drink/food carb split */}
+        <section>
+          <h2 className="eyebrow text-muted-foreground mb-3">At a glance</h2>
+          <div className="bg-card border border-border rounded-3xl p-5">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+              <div>
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                  <Droplets className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span className="text-xs">Bottles</span>
+                </div>
+                <p className="font-display text-2xl font-semibold text-foreground">{bottleCount}</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                  <Bike className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  <span className="text-xs">Food items</span>
+                </div>
+                <p className="font-display text-2xl font-semibold text-foreground">{foodItemsCount}</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                  <span className="h-2 w-2 rounded-full bg-primary shrink-0" aria-hidden="true" />
+                  <span className="text-xs">From drinks</span>
+                </div>
+                <p className="font-display text-2xl font-semibold text-foreground">
+                  {drinkCarbs}<span className="text-sm font-normal text-muted-foreground">g</span>
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+                  <span className="h-2 w-2 rounded-full bg-accent shrink-0" aria-hidden="true" />
+                  <span className="text-xs">From food</span>
+                </div>
+                <p className="font-display text-2xl font-semibold text-foreground">
+                  {foodCarbs}<span className="text-sm font-normal text-muted-foreground">g</span>
+                </p>
+              </div>
+            </div>
+
+            {carbSplitTotal > 0 && (
+              <div className="mt-5">
+                <div
+                  className="flex h-2.5 rounded-full overflow-hidden bg-muted"
+                  role="img"
+                  aria-label={`Carbs: ${drinkPct}% from drinks, ${foodPct}% from food`}
+                >
+                  {drinkPct > 0 && <div className="bg-primary" style={{ width: `${drinkPct}%` }} />}
+                  {foodPct > 0 && <div className="bg-accent" style={{ width: `${foodPct}%` }} />}
+                </div>
+                <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
+                  <span>Drinks {drinkPct}%</span>
+                  <span>Food {foodPct}%</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* Pre-ride note */}
         {result.preRideNote && (
