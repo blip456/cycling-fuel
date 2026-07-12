@@ -253,7 +253,7 @@ export default function NewPlanPage() {
   return (
     <div className="min-h-dvh bg-background flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-4 py-3">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-5 py-3">
         <div className="flex items-center gap-3">
           <button
             onClick={() => (step > 1 ? setStep(step - 1) : router.back())}
@@ -270,7 +270,7 @@ export default function NewPlanPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 pb-wizard">
+      <div className="flex-1 overflow-y-auto px-5 py-6 pb-wizard">
         {/* STEP 1: Ride Details */}
         {step === 1 && (
           <div className="flex flex-col gap-5">
@@ -838,11 +838,11 @@ export default function NewPlanPage() {
         )}
       </div>
 
-      {/* Footer buttons — sits above the bottom nav */}
-      <div className="fixed bottom-above-nav left-0 right-0 z-50 bg-card border-t border-border px-4 py-3 max-w-lg mx-auto">
+      {/* Footer button — floats above the nav, same width, seamless paper bg */}
+      <div className="pointer-events-none fixed bottom-above-nav left-0 right-0 z-50 px-5 pt-8 pb-3 max-w-lg mx-auto bg-gradient-to-t from-background via-background to-transparent">
         {step < 3 ? (
           <Button
-            className="w-full"
+            className="w-full pointer-events-auto"
             size="lg"
             disabled={step === 1 ? !canProceedStep1() : !canProceedStep2()}
             onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3)}
@@ -852,7 +852,7 @@ export default function NewPlanPage() {
           </Button>
         ) : (
           <Button
-            className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
+            className="w-full pointer-events-auto bg-accent hover:bg-accent/90 text-accent-foreground"
             size="lg"
             disabled={loading}
             onClick={handleGenerate}

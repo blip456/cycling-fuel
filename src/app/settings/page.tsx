@@ -718,7 +718,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="px-4 pt-12 pb-nav">
+    <div className="px-5 pt-14 pb-nav">
       <h1 className="font-display text-4xl font-semibold text-foreground mb-7 pt-2">Settings</h1>
 
       {/* Profile */}

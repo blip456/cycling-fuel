@@ -249,6 +249,7 @@ export default function PlanResultPage() {
   const [editBottles, setEditBottles] = useState<EditBottle[]>([]);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [openPickerIdx, setOpenPickerIdx] = useState<number | null>(null);
+  const [recalcMsg, setRecalcMsg] = useState<string | null>(null);
   const [editCarbsPerHour, setEditCarbsPerHour] = useState<CarbRate>(60);
   const [editPlanBottles, setEditPlanBottles] = useState<Bottle[]>([]);
 
@@ -340,14 +341,17 @@ export default function PlanResultPage() {
     setEditItems(plan.result.schedule.map((s) => ({ ...s })));
     setEditMode(true);
     setOpenPickerIdx(null);
+    setRecalcMsg(null);
   }
 
   function cancelEdit() {
     setEditMode(false);
     setOpenPickerIdx(null);
+    setRecalcMsg(null);
   }
 
   function setBottleDrink(idx: number, productId: string | null) {
+    setRecalcMsg(null);
     setEditBottles((prev) =>
       prev.map((b, i) => {
         if (i !== idx) return b;
@@ -361,11 +365,69 @@ export default function PlanResultPage() {
   }
 
   function stepBottleScoops(idx: number, delta: number) {
+    setRecalcMsg(null);
     setEditBottles((prev) =>
       prev.map((b, i) =>
         i === idx ? { ...b, scoops: Math.max(1, b.scoops + delta) } : b
       )
     );
+  }
+
+  // Re-run the whole plan from the edited drink setup (each bottle's drink +
+  // scoops) so solid food is re-added to fill whatever carb gap the drinks
+  // leave. This is what lets "fewer scoops" translate into "more food".
+  function recalculate() {
+    if (!plan?.result) return;
+    const bottleSetup = editPlanBottles.map((pb) => {
+      const eb = editBottles.find((e) => e.bottleId === pb.id);
+      return {
+        bottleId: pb.id,
+        mlCapacity: pb.mlCapacity,
+        drinkProductId: eb?.drinkProductId ?? null,
+        scoops: eb?.scoops ?? 0,
+      };
+    });
+    const newResult = calculateFuelPlan({
+      distance: plan.distance,
+      avgSpeed: plan.avgSpeed,
+      carbsPerHour: editCarbsPerHour,
+      bottles: editPlanBottles,
+      includeSolidFood: plan.includeSolidFood,
+      includeCaffeine: plan.includeCaffeine,
+      selectedDrinks: plan.selectedDrinks,
+      selectedFoods: plan.selectedFoods,
+      drinks,
+      foods,
+      weather: plan.weather,
+      weightKg: profile.weightKg,
+      intensity: plan.intensity,
+      sweatRateMlPerHour: profile.sweatRateMlPerHour,
+      bottleSetup,
+    });
+    setEditBottles(
+      newResult.bottlePrep.map((b) => ({
+        bottleId: b.bottleId,
+        bottleIndex: b.bottleIndex,
+        mlCapacity: b.mlCapacity,
+        drinkProductId: b.drinkProductId ?? null,
+        scoops: b.scoops,
+      }))
+    );
+    setEditItems(newResult.schedule.map((s) => ({ ...s })));
+    setOpenPickerIdx(null);
+    const foodCount = newResult.schedule.filter((s) => s.food).length;
+    const target = Math.round(newResult.durationHours * editCarbsPerHour);
+    const delivered = newResult.schedule.reduce(
+      (s, i) => s + (i.drink?.carbs ?? 0) + (i.food?.carbs ?? 0),
+      0
+    );
+    if (!plan.includeSolidFood) {
+      setRecalcMsg("Recalculated. Solid food is off for this plan — turn it on in a new plan to let food fill gaps.");
+    } else if (foodCount > 0) {
+      setRecalcMsg(`Recalculated — ${foodCount} food item${foodCount !== 1 ? "s" : ""} added to reach ${delivered}g (target ${target}g).`);
+    } else {
+      setRecalcMsg(`Recalculated — drinks already deliver ${delivered}g, covering your ${target}g target, so no food is needed.`);
+    }
   }
 
   function removeFood(idx: number) {
@@ -466,7 +528,7 @@ export default function PlanResultPage() {
   return (
     <div className="min-h-dvh bg-background pb-nav">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-4 py-3">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-5 py-3">
         <div className="flex items-center justify-between gap-2">
           {editMode ? (
             <>
@@ -517,7 +579,7 @@ export default function PlanResultPage() {
         </div>
       </div>
 
-      <div className="px-4 py-5 flex flex-col gap-5">
+      <div className="px-5 py-5 flex flex-col gap-5">
         {/* Summary card */}
         <div className="bg-primary rounded-3xl p-6 text-primary-foreground relative overflow-hidden animate-fade-up">
           <div className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-primary-foreground/5 blur-xl" aria-hidden="true" />
@@ -863,6 +925,29 @@ export default function PlanResultPage() {
               );
             })}
           </div>
+
+          {/* Recalculate — rebuild the schedule (and re-fill food) from the
+              edited drink setup. This is what turns "fewer scoops" into "more food". */}
+          {editMode && (
+            <div className="mt-3 flex flex-col gap-2">
+              <button
+                onClick={recalculate}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold uppercase tracking-wide shadow-sm hover:bg-accent hover:shadow-md transition-all duration-300"
+              >
+                <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
+                Recalculate — fill food to match
+              </button>
+              <p aria-live="polite" className="text-xs px-1 text-center min-h-[1rem]">
+                {recalcMsg ? (
+                  <span className="text-primary font-medium">{recalcMsg}</span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    Changed scoops or drinks? Recalculate to re-fill solid food for the new carb gap.
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Schedule */}

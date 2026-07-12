@@ -55,7 +55,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export default function HelpPage() {
   return (
-    <div className="px-4 pt-12 pb-nav">
+    <div className="px-5 pt-14 pb-nav">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link href="/settings" className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground">
