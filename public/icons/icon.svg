@@ -1,47 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <!--
-    CycleFuel "Bolt Bidon" icon
-    A solid cycling bottle with a lightning bolt cut out as negative space:
-    the energy inside the drink. Sage gradient ties to the app's primary
-    palette, the peach nozzle to its accent. No text — legible at 16px.
-    Note: the bolt mask is referenced from a root-space group and carries
-    the art transform explicitly, so it renders identically everywhere.
+    CycleFuel leaf icon — the app's leaf mark (as seen on the Plan tab and the
+    home CTA) rendered as a solid white leaf on a deep-forest square. Opaque,
+    full-bleed background so iOS/Android masks round it cleanly; the blade is
+    filled (legible at 16px) with a forest vein for detail at larger sizes.
   -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7DB18D"/>
-      <stop offset="0.55" stop-color="#6B9E7B"/>
-      <stop offset="1" stop-color="#41754F"/>
+      <stop offset="0" stop-color="#43684F"/>
+      <stop offset="0.55" stop-color="#375A45"/>
+      <stop offset="1" stop-color="#2A3830"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0.28" cy="0.18" r="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+    <radialGradient id="glow" cx="0.3" cy="0.2" r="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18"/>
       <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
     </radialGradient>
-    <mask id="boltCut" maskUnits="userSpaceOnUse">
-      <rect width="512" height="512" fill="white"/>
-      <path transform="rotate(-8 256 256)"
-            d="M290 192 L206 308 H250 L222 404 L306 286 H262 Z"
-            fill="black"/>
-    </mask>
   </defs>
 
   <rect width="512" height="512" fill="url(#bg)"/>
   <rect width="512" height="512" fill="url(#glow)"/>
 
-  <g mask="url(#boltCut)">
-    <g transform="rotate(-8 256 256)">
-      <!-- Soft grounding shadow -->
-      <g fill="#1C2526" opacity="0.13" transform="translate(8 10)">
-        <rect x="202" y="116" width="108" height="42" rx="13"/>
-        <path d="M206 164 H306 C326 164 338 184 338 212 V246 C338 268 326 280 326 300 C326 320 338 332 338 354 V390 Q338 428 300 428 H212 Q174 428 174 390 V354 C174 332 186 320 186 300 C186 280 174 268 174 246 V212 C174 184 186 164 206 164 Z"/>
-      </g>
-      <!-- Nozzle (peach accent) -->
-      <rect x="236" y="80" width="40" height="38" rx="11" fill="#F08060"/>
-      <!-- Cap -->
-      <rect x="202" y="116" width="108" height="42" rx="13" fill="#FFFFFF"/>
-      <!-- Body: shoulder taper + grip waist -->
-      <path d="M206 164 H306 C326 164 338 184 338 212 V246 C338 268 326 280 326 300 C326 320 338 332 338 354 V390 Q338 428 300 428 H212 Q174 428 174 390 V354 C174 332 186 320 186 300 C186 280 174 268 174 246 V212 C174 184 186 164 206 164 Z"
-            fill="#FFFFFF"/>
-    </g>
+  <!-- Leaf (lucide "Leaf"), scaled & centered on the blade's visual mass -->
+  <g transform="translate(116 128) scale(11.67)" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" fill="#FFFFFF"/>
+    <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" fill="none" stroke="#2C3930" stroke-width="1.6"/>
   </g>
 </svg>
