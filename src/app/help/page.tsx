@@ -150,6 +150,22 @@ export default function HelpPage() {
         </Accordion>
       </Section>
 
+      {/* Fueling rhythm */}
+      <Section emoji="⏱️" title="Fueling by rhythm" id="rhythm">
+        <Card>
+          <p className="text-muted-foreground">By default a plan starts from your bottles — their carbs are counted, and solid food fills whatever the target still needs. If you&apos;d rather fuel to a fixed rhythm, set one in <span className="text-foreground font-medium">Settings → Your Fueling Rhythm</span> and it decides the plan first.</p>
+        </Card>
+        <Accordion title="How does it change the plan?">
+          <p className="mb-2"><strong>Bottles per hour.</strong> Say 1 bottle/hr on a 4-hour ride: the plan mixes 4 bottles, counts their carbs, and fills the remainder with food. If you only carry two bottles it says so — you&apos;ll need powder to remix on the road, because a plain water refill carries no carbs.</p>
+          <p className="mb-2"><strong>Solid items per hour.</strong> Say 1 bar/hr on the same ride: 4 items go in first, evenly spaced through the feed window, and your bottles are then mixed strong enough to cover the carbs that are left — up to 1.5× normal strength, beyond which the plan flags the shortfall instead of asking you to drink syrup.</p>
+          <p>Leave it off and nothing changes. The rhythm is also snapshotted onto each plan when you create it, so changing the setting never reshapes rides you&apos;ve already planned.</p>
+        </Accordion>
+        <Accordion title="Is a fixed rhythm a good idea?">
+          <p className="mb-2">It&apos;s a practical one. Carb targets are per hour anyway, and &quot;a bottle every hour&quot; or &quot;a bar every hour&quot; is far easier to hold on the bike than a table of times. Many riders fuel exactly this way.</p>
+          <p>Two things to watch: a food rhythm faster than ~1 item per 45 min crowds bars and real food (gels and chews clear quicker — the plan warns you), and a bottle rhythm that outpaces the weather baseline means you&apos;re drinking on schedule rather than to need. Both are fine if that&apos;s what you want; the plan just makes them visible.</p>
+        </Accordion>
+      </Section>
+
       {/* Sip logic */}
       <Section emoji="🍼" title="The 20-minute schedule">
         <Card>

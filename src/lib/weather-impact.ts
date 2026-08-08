@@ -52,6 +52,7 @@ export function recalcPlanForWeather(
     weightKg: profile.weightKg,
     intensity: plan.intensity,
     sweatRateMlPerHour: profile.sweatRateMlPerHour,
+    fuelAnchor: plan.fuelAnchor,
     ...(bottleSetup && bottleSetup.length > 0 ? { bottleSetup } : {}),
   });
 }

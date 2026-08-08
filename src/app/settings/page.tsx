@@ -12,10 +12,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { CARB_RATE_OPTIONS, BOTTLE_SIZE_OPTIONS, FOOD_TYPE_LABELS } from "@/lib/types";
+import { CARB_RATE_OPTIONS, BOTTLE_SIZE_OPTIONS, FOOD_TYPE_LABELS, FUEL_ANCHOR_RATE_OPTIONS } from "@/lib/types";
 import { summarizeFeedback } from "@/lib/personalization";
 import { formatBottleSize } from "@/lib/utils";
-import type { DrinkProduct, FoodItem, FoodType, FuelPlan, SweatTest, UserProfile, CarbRatio, RideIntensity } from "@/lib/types";
+import type { DrinkProduct, FoodItem, FoodType, FuelAnchorType, FuelPlan, SweatTest, UserProfile, CarbRatio, RideIntensity } from "@/lib/types";
 
 const CARB_RATIO_LABELS: Record<CarbRatio, string> = {
   "single": "Single source (glucose only)",
@@ -661,6 +661,102 @@ function SweatRateSection() {
   );
 }
 
+// Optional per-hour rhythm that decides the first half of every new plan.
+function FuelRhythmSection() {
+  const { profile, updateProfile } = useStore();
+  const anchor = profile.fuelAnchor;
+  const mode: "off" | FuelAnchorType = anchor?.type ?? "off";
+  const rate = anchor?.perHour ?? 1;
+
+  const MODES: { value: "off" | FuelAnchorType; label: string }[] = [
+    { value: "off", label: "Off" },
+    { value: "drink", label: "Bottles" },
+    { value: "food", label: "Food" },
+  ];
+
+  function setMode(next: "off" | FuelAnchorType) {
+    updateProfile({ fuelAnchor: next === "off" ? undefined : { type: next, perHour: rate } });
+  }
+
+  // Worked example on a 4-hour ride, so the setting isn't abstract.
+  const exampleCount = Math.max(1, Math.round(4 * rate));
+  const preview =
+    mode === "drink"
+      ? `A 4-hour ride starts with ${exampleCount} × ${formatBottleSize(profile.defaultBottleMl)} of mix — solid food then fills whatever carbs are left.`
+      : mode === "food"
+      ? `A 4-hour ride starts with ${exampleCount} solid item${exampleCount !== 1 ? "s" : ""} — your bottles are then mixed to cover the remaining carbs.`
+      : "Plans are built the standard way: your bottles as configured, with solid food filling the carb gap.";
+
+  return (
+    <section className="mb-7">
+      <h2 className="eyebrow text-muted-foreground mb-3">Your Fueling Rhythm</h2>
+      <div className="bg-card rounded-2xl border border-border p-4 flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Prefer to fuel by a fixed rhythm — a bottle an hour, or a bar an hour? Pick what leads and
+          CycleFuel counts that first, then fills the rest of your carb target with the other source.
+        </p>
+
+        <div>
+          <Label className="mb-2 block">What sets the pace?</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {MODES.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setMode(opt.value)}
+                className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all duration-150 ${
+                  mode === opt.value
+                    ? "bg-primary text-white border-primary"
+                    : "bg-card text-foreground border-border hover:border-primary/50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {mode !== "off" && (
+          <div>
+            <Label className="mb-2 block">
+              {mode === "drink" ? "Bottles per hour" : "Solid items per hour"}
+            </Label>
+            <div className="grid grid-cols-5 gap-1.5">
+              {FUEL_ANCHOR_RATE_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => updateProfile({ fuelAnchor: { type: mode, perHour: opt } })}
+                  className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all duration-150 ${
+                    rate === opt
+                      ? "bg-primary text-white border-primary"
+                      : "bg-card text-foreground border-border hover:border-primary/50"
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+            {mode === "drink" && (
+              <p className="text-xs text-muted-foreground mt-2">
+                One bottle means the bottle size on the plan (your default is{" "}
+                {formatBottleSize(profile.defaultBottleMl)}). More bottles than you carry means
+                remixing en route — the plan says so when that happens.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="rounded-xl bg-sage-light border border-primary/20 px-3.5 py-3">
+          <p className="text-xs text-foreground/80 leading-relaxed">{preview}</p>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Applies to new plans. Plans you&apos;ve already made keep the rhythm they were built with.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const {
     profile, drinks, foods, plans,
@@ -808,6 +904,8 @@ export default function SettingsPage() {
       </section>
 
       <SweatRateSection />
+
+      <FuelRhythmSection />
 
       {/* What CycleFuel has learned from ride feedback */}
       {(() => {

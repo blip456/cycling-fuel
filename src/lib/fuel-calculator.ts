@@ -6,6 +6,7 @@ import type {
   CarbRate,
   DrinkProduct,
   FoodItem,
+  FuelAnchor,
   RideIntensity,
   ScheduleItem,
   SelectedDrink,
@@ -40,7 +41,17 @@ interface CalcInputs {
   // When provided, bottlePrep is built from this exact setup (drink + scoops
   // per bottle) instead of cycling selectedDrinks across `bottles`.
   bottleSetup?: BottleSetup[];
+  // Optional per-hour rhythm ("a bottle an hour", "a bar an hour") that decides
+  // one side of the plan before anything else. See resolveAnchor below.
+  fuelAnchor?: FuelAnchor;
 }
+
+// Hard ceiling on anchored items so a silly perHour can't generate a hundred
+// bottles on an all-day ride.
+const MAX_ANCHOR_ITEMS = 24;
+// How far above a drink's normal concentration we'll mix to reach a carb
+// target when food sets the rhythm. Beyond this it stops being drinkable.
+const MAX_CONCENTRATION_FACTOR = 1.5;
 
 // Mid-range sweat sodium concentration (mg per litre of sweat). Individual
 // sweat runs anywhere from ~400 (light salty) to ~1500+ (very salty); 800 is a
@@ -88,18 +99,26 @@ function foodGap(f: FoodItem): number {
   return FOOD_GAP_MIN[f.type ?? "bar"];
 }
 
+// Rhythm beats optimal spacing: the rider asked for "one an hour", so spread
+// exactly that many items evenly across the feed window.
+function anchoredFoodTimes(count: number, startMin: number, endMin: number): number[] {
+  if (count <= 0 || endMin < startMin) return [];
+  if (count === 1) return [startMin];
+  const gap = (endMin - startMin) / (count - 1);
+  return Array.from({ length: count }, (_, i) => Math.round(startMin + i * gap));
+}
+
+// "1", "1.5", "0.5" — no trailing zeroes on whole numbers.
+function fmtRate(n: number): string {
+  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)));
+}
+
 export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   const { distance, avgSpeed, carbsPerHour, bottles, includeSolidFood, weather, weightKg } = inputs;
 
   const durationHours = distance / avgSpeed;
   const durationMin = Math.round(durationHours * 60);
   const totalCarbs = Math.round(durationHours * carbsPerHour);
-  const { perHour: fluidPerHourMl, source: fluidSource } = resolveFluidPerHour(
-    inputs.sweatRateMlPerHour,
-    weather
-  );
-  const totalFluidMl = Math.round(durationHours * fluidPerHourMl);
-  const sodiumTargetMg = Math.round((totalFluidMl / 1000) * SWEAT_SODIUM_MG_PER_L);
 
   const activeDrinks = inputs.selectedDrinks
     .map((sd) => ({
@@ -111,6 +130,57 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   const activeFoods = inputs.selectedFoods
     .map((id) => inputs.foods.find((f) => f.id === id))
     .filter((f): f is FoodItem => !!f);
+
+  // Feed window: warmup at the start, cutoff 20 min before finish.
+  const feedStartMin = Math.max(30, Math.min(45, Math.round(durationMin * 0.15)));
+  const feedEndMin = durationMin - 20;
+
+  // --- Step 0: the fueling rhythm ------------------------------------------
+  // Before anything else, an optional rhythm fixes one side of the plan: N
+  // bottles of mix per hour, or N solid items per hour. The other side then
+  // fills whatever carbs are left. Without it, everything below behaves as it
+  // always has — bottles as configured, food filling the gap.
+  const anchor = inputs.fuelAnchor && inputs.fuelAnchor.perHour > 0 ? inputs.fuelAnchor : undefined;
+  const anchorCount = anchor
+    ? Math.max(1, Math.min(MAX_ANCHOR_ITEMS, Math.round(durationHours * anchor.perHour)))
+    : 0;
+  // An explicit bottle setup (the plan editor) is the rider's own hand on the
+  // bottles, so it wins over a drink rhythm.
+  const drinkAnchor = anchor?.type === "drink" && !inputs.bottleSetup && anchorCount > 0;
+  const foodAnchor =
+    anchor?.type === "food" && includeSolidFood && activeFoods.length > 0 && anchorCount > 0;
+
+  // "One bottle" means the bottle this plan actually uses.
+  const anchorBottleMl = bottles[0]?.mlCapacity ?? 500;
+
+  // Anchored food is placed first — its carbs decide how strong the mix needs
+  // to be. Items that don't fit the feed window are reported, not silently cut.
+  const anchorFoodSlots =
+    feedEndMin >= feedStartMin
+      ? Math.max(1, Math.floor((feedEndMin - feedStartMin) / 15) + 1)
+      : 0;
+  const anchorFoodPlaced = foodAnchor ? Math.min(anchorCount, anchorFoodSlots) : 0;
+  const anchoredFood = foodAnchor
+    ? anchoredFoodTimes(anchorFoodPlaced, feedStartMin, feedEndMin).map((timeMin, i) => ({
+        timeMin,
+        food: activeFoods[i % activeFoods.length],
+      }))
+    : [];
+  const anchoredFoodCarbs = anchoredFood.reduce((s, e) => s + e.food.carbsPerServing, 0);
+
+  const { perHour: baseFluidPerHourMl, source: baseFluidSource } = resolveFluidPerHour(
+    inputs.sweatRateMlPerHour,
+    weather
+  );
+  // A bottle-per-hour rhythm is also a drinking rhythm: if it asks for more
+  // fluid than the weather baseline, the rhythm sets the pace.
+  const anchoredFluidMl = drinkAnchor ? anchorCount * anchorBottleMl : 0;
+  const totalFluidMl = Math.max(Math.round(durationHours * baseFluidPerHourMl), anchoredFluidMl);
+  const fluidPerHourMl =
+    durationHours > 0 ? Math.round(totalFluidMl / durationHours) : baseFluidPerHourMl;
+  const fluidSource: CalculatedPlan["fluidSource"] =
+    anchoredFluidMl > Math.round(durationHours * baseFluidPerHourMl) ? "rhythm" : baseFluidSource;
+  const sodiumTargetMg = Math.round((totalFluidMl / 1000) * SWEAT_SODIUM_MG_PER_L);
 
   // --- Bottle prep (what to mix tonight) ---
   // Two ways to build it: an explicit per-bottle setup (from the plan editor,
@@ -126,6 +196,26 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     carbsTotal: 0,
     sodiumMg: 0,
   });
+
+  // A drink rhythm replaces the bottle list with "N bottles of mix", which may
+  // be more than the rider carries — that's a refill-with-powder plan, and it's
+  // flagged in the warnings below.
+  const prepBottles: Bottle[] = drinkAnchor
+    ? Array.from({ length: anchorCount }, (_, i) => ({
+        id: `mix-${i + 1}`,
+        mlCapacity: anchorBottleMl,
+      }))
+    : bottles;
+
+  const plannedBottleMl = prepBottles.reduce((sum, b) => sum + b.mlCapacity, 0);
+  // Bottles you don't finish don't deliver their carbs, so aim the mix at the
+  // share of them this ride actually drinks.
+  const plannedConsumedShare = plannedBottleMl > 0 ? Math.min(totalFluidMl / plannedBottleMl, 1) : 1;
+  // With food setting the rhythm, the bottles are mixed to cover exactly the
+  // carbs the food leaves behind.
+  const drinkCarbTarget = foodAnchor
+    ? Math.max(0, Math.round((totalCarbs - anchoredFoodCarbs) / Math.max(plannedConsumedShare, 0.1)))
+    : 0;
 
   const bottlePrep: BottlePrep[] = inputs.bottleSetup
     ? inputs.bottleSetup.map((b, i) => {
@@ -147,13 +237,27 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
           sodiumMg: Math.round(servingRatio * (product.sodiumMgPerServing ?? 0)),
         };
       })
-    : bottles.map((bottle, i) => {
+    : prepBottles.map((bottle, i) => {
         const drinkEntry = activeDrinks.length > 0 ? activeDrinks[i % activeDrinks.length] : null;
         if (!drinkEntry) return waterBottle(bottle.id, i, bottle.mlCapacity);
 
         const { product, sd } = drinkEntry;
         const scoops = sd.scoopsOverride ?? product.scoopsRecommended;
-        const scaledScoops = Math.round((bottle.mlCapacity / product.mlPerServing) * scoops);
+        const normalScoops = Math.round((bottle.mlCapacity / product.mlPerServing) * scoops);
+
+        let scaledScoops = normalScoops;
+        if (foodAnchor) {
+          // Split the remaining carbs across the bottles by volume, then round
+          // to whole scoops — capped so the mix stays drinkable.
+          const carbsPerScoop = product.carbsPerServing / product.scoopsRecommended;
+          const share = plannedBottleMl > 0 ? bottle.mlCapacity / plannedBottleMl : 1 / prepBottles.length;
+          const maxScoops = Math.max(1, Math.round(normalScoops * MAX_CONCENTRATION_FACTOR));
+          scaledScoops = Math.min(
+            maxScoops,
+            Math.max(0, Math.round((drinkCarbTarget * share) / Math.max(carbsPerScoop, 0.1)))
+          );
+        }
+        if (scaledScoops <= 0) return waterBottle(bottle.id, i, bottle.mlCapacity);
         const servingRatio = scaledScoops / product.scoopsRecommended;
 
         return {
@@ -184,14 +288,13 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   // --- Solid food: fills only the remaining carb gap ---
   const foodCarbsGap = Math.max(0, totalCarbs - fullRideDrinkCarbs);
 
-  // Feed window: warmup at the start, cutoff 20 min before finish.
-  const feedStartMin = Math.max(30, Math.min(45, Math.round(durationMin * 0.15)));
-  const feedEndMin = durationMin - 20;
-
   // Place food sequentially. Each item's spacing depends on its OWN type — a
-  // gel clears fast and can be followed sooner than a bar or real food.
+  // gel clears fast and can be followed sooner than a bar or real food. With a
+  // food rhythm the count is already fixed, so those placements are used as-is.
   const foodEvents: { timeMin: number; food: FoodItem }[] = [];
-  if (includeSolidFood && activeFoods.length > 0 && foodCarbsGap > 5 && feedEndMin >= feedStartMin) {
+  if (foodAnchor) {
+    foodEvents.push(...anchoredFood);
+  } else if (includeSolidFood && activeFoods.length > 0 && foodCarbsGap > 5 && feedEndMin >= feedStartMin) {
     let t = feedStartMin;
     let carbsPlaced = 0;
     let i = 0;
@@ -394,6 +497,76 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
 
   // --- Warnings ---
   const warnings: string[] = [];
+
+  // --- Fueling rhythm: what it fixed, and where it strains ---
+  let rhythmNote: string | undefined;
+  const foodCarbsPlanned = foodEvents.reduce((s, e) => s + e.food.carbsPerServing, 0);
+  if (drinkAnchor && anchor) {
+    const gap = Math.max(0, totalCarbs - fullRideDrinkCarbs);
+    rhythmNote =
+      `Your rhythm — ${fmtRate(anchor.perHour)} bottle${anchor.perHour === 1 ? "" : "s"}/hr — sets this plan first: ` +
+      `${anchorCount} × ${anchorBottleMl}ml of mix for ${fullRideDrinkCarbs}g of carbs. ` +
+      (gap > 5
+        ? `Solid food fills the remaining ${gap}g.`
+        : `That already covers your ${totalCarbs}g target, so no food is scheduled.`);
+    const baselineFluidMl = Math.round(durationHours * baseFluidPerHourMl);
+    if (totalFluidMl > baselineFluidMl * 1.2) {
+      warnings.push(
+        `This rhythm paces you to ${fluidPerHourMl}ml/hr — well above the ${baseFluidPerHourMl}ml/hr these conditions call for. ` +
+          (fluidPerHourMl >= 1000
+            ? "Over ~1L/hr is more than most guts absorb, so much of it just sloshes. "
+            : "") +
+          `A smaller bottle or a lower rate keeps the carbs without the extra fluid.`
+      );
+    }
+    if (anchorCount > bottles.length) {
+      const refills = anchorCount - bottles.length;
+      warnings.push(
+        `Your rhythm asks for ${anchorCount} × ${anchorBottleMl}ml of mix but you're carrying ${bottles.length} bottle${bottles.length !== 1 ? "s" : ""}. ` +
+          `Carry powder for ${refills} remix${refills !== 1 ? "es" : ""} en route — a plain water refill delivers no carbs.`
+      );
+    }
+  } else if (foodAnchor && anchor) {
+    const unit = activeFoods.length === 1 ? activeFoods[0].name : "solid item";
+    rhythmNote =
+      `Your rhythm — ${fmtRate(anchor.perHour)} × ${unit} per hour — sets this plan first: ` +
+      `${anchorFoodPlaced} item${anchorFoodPlaced !== 1 ? "s" : ""} for ${foodCarbsPlanned}g of carbs. ` +
+      (fullRideDrinkCarbs > 0
+        ? `Your bottles are mixed to add the remaining ${fullRideDrinkCarbs}g.`
+        : `That already covers your ${totalCarbs}g target, so your bottles are plain water.`);
+    if (anchorFoodPlaced < anchorCount) {
+      warnings.push(
+        `Only ${anchorFoodPlaced} of the ${anchorCount} items your rhythm asks for fit between the ${feedStartMin}-min warm-up and the 20-min pre-finish cutoff. ` +
+          `The rest stay in your pocket as backup.`
+      );
+    }
+    if (anchorFoodPlaced > 1) {
+      const actualGap = Math.round((feedEndMin - feedStartMin) / (anchorFoodPlaced - 1));
+      const neededGap = Math.round(
+        anchoredFood.reduce((s, e) => s + foodGap(e.food), 0) / anchoredFood.length
+      );
+      if (actualGap < neededGap) {
+        warnings.push(
+          `This rhythm puts food in every ~${actualGap} min, but what you've chosen typically needs ~${neededGap} min to clear the stomach. ` +
+            `Fine with gels and chews, tight with bars or real food — halve the rate or switch to faster fuel if your gut complains.`
+        );
+      }
+    }
+    const drinkShortfall = Math.round(drinkCarbTarget * plannedConsumedShare) - fullRideDrinkCarbs;
+    if (drinkShortfall > 10) {
+      warnings.push(
+        `Your food rhythm leaves ${Math.round(drinkCarbTarget * plannedConsumedShare)}g for the bottles, but even at ${MAX_CONCENTRATION_FACTOR}× normal strength they only carry ${fullRideDrinkCarbs}g. ` +
+          `Add a bottle, a stronger drink mix, or accept the ${drinkShortfall}g shortfall.`
+      );
+    }
+    if (foodCarbsPlanned > totalCarbs + 20) {
+      warnings.push(
+        `Your rhythm delivers ${foodCarbsPlanned}g of food carbs against a ${totalCarbs}g target — ${foodCarbsPlanned - totalCarbs}g more than this ride needs. ` +
+          `Bottles are plain water to compensate; lower the rate or pick smaller items to bring it in line.`
+      );
+    }
+  }
+
   if (carbsPerHour > 60 && activeDrinks.some((ad) => ad.product.carbRatio === "single")) {
     warnings.push(
       "You're targeting >60g carbs/hr with a single-source carb drink. Consider a drink with glucose + fructose (2:1 or 1:1 ratio) to avoid GI distress."
@@ -481,6 +654,7 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     sodiumDeliveredMg,
     fluidPerHourMl,
     fluidSource,
+    rhythmNote,
     warnings,
   };
 }

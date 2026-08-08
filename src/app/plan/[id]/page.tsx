@@ -6,7 +6,7 @@ import {
   ArrowLeft, ExternalLink, Sun, Cloud, CloudRain, CloudLightning,
   Snowflake, Wind, Droplets, Flame, AlertTriangle, Bike, Coffee,
   Pencil, X, Plus, Check, Trash2, Minus, Info, Download, RefreshCw,
-  Lock, LockOpen, Loader2,
+  Lock, LockOpen, Loader2, Timer,
 } from "lucide-react";
 import Link from "next/link";
 import { format, parseISO, formatDistanceToNow, differenceInCalendarDays } from "date-fns";
@@ -539,6 +539,7 @@ export default function PlanResultPage() {
       weightKg: profile.weightKg,
       intensity: plan.intensity,
       sweatRateMlPerHour: profile.sweatRateMlPerHour,
+      fuelAnchor: plan.fuelAnchor,
       bottleSetup,
     });
     setEditBottles(
@@ -601,6 +602,7 @@ export default function PlanResultPage() {
         weightKg: profile.weightKg,
         intensity: plan.intensity,
         sweatRateMlPerHour: profile.sweatRateMlPerHour,
+        fuelAnchor: plan.fuelAnchor,
       });
       // A full recalculation runs against the forecast on file, so the plan is
       // back in sync with it — even if it was locked and lagging behind.
@@ -1014,6 +1016,17 @@ export default function PlanResultPage() {
             )}
           </div>
         </section>
+
+        {/* Fueling rhythm — what the plan was built around first */}
+        {result.rhythmNote && (
+          <div className="flex gap-3 bg-card border border-primary/20 rounded-2xl p-4">
+            <Timer className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-primary mb-0.5">Fueling rhythm</p>
+              <p className="text-sm text-foreground leading-relaxed">{result.rhythmNote}</p>
+            </div>
+          </div>
+        )}
 
         {/* Pre-ride note */}
         {result.preRideNote && (
