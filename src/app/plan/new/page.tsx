@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useStore } from "@/lib/store";
-import { calculateFuelPlan } from "@/lib/fuel-calculator";
+import { calculateFuelPlan, bottlesForRhythm, rhythmItemCount } from "@/lib/fuel-calculator";
 import { geocodeLocation, fetchWeather, manualWeather } from "@/lib/weather";
 import { LocationAutocomplete, type VerifiedLocation } from "@/components/location-autocomplete";
 import { formatDuration, generateId, formatBottleSize } from "@/lib/utils";
@@ -205,11 +205,15 @@ export default function NewPlanPage() {
     }
 
     const planId = generateId();
+    // A bottle rhythm needs more fills than the rider configured — materialise
+    // them now so the plan's bottle list and its bottle prep never disagree.
+    const planBottles = bottlesForRhythm(data.bottles, duration, profile.fuelAnchor, generateId);
     const result = calculateFuelPlan({
       distance: distanceNum,
       avgSpeed: speedNum,
       carbsPerHour: data.carbsPerHour,
-      bottles: data.bottles,
+      bottles: planBottles,
+      bottlesCarried: data.bottles.length,
       includeSolidFood: data.includeSolidFood,
       includeCaffeine: data.includeCaffeine,
       selectedDrinks: data.selectedDrinks,
@@ -220,6 +224,7 @@ export default function NewPlanPage() {
       weightKg: profile.weightKg,
       intensity: data.intensity,
       sweatRateMlPerHour: profile.sweatRateMlPerHour,
+      fuelAnchor: profile.fuelAnchor,
     });
 
     const plan: FuelPlan = {
@@ -232,9 +237,12 @@ export default function NewPlanPage() {
       lat,
       lng,
       weather,
+      calcWeather: weather,
       carbsPerHour: data.carbsPerHour,
       intensity: data.intensity,
-      bottles: data.bottles,
+      bottles: planBottles,
+      bottlesCarried: data.bottles.length,
+      fuelAnchor: profile.fuelAnchor,
       includeSolidFood: data.includeSolidFood,
       includeCaffeine: data.includeCaffeine,
       selectedDrinks: data.selectedDrinks,
@@ -555,6 +563,36 @@ export default function NewPlanPage() {
                 </button>
               </div>
             </div>
+
+            {/* Fueling rhythm — what it will fix first for this ride */}
+            {(() => {
+              const anchor = profile.fuelAnchor;
+              if (!anchor || anchor.perHour <= 0 || duration <= 0) return null;
+              const count = rhythmItemCount(duration, anchor);
+              const size = data.bottles[0]?.mlCapacity ?? profile.defaultBottleMl;
+              const short = anchor.type === "drink" ? count - data.bottles.length : 0;
+              return (
+                <div className="rounded-xl bg-sage-light border border-primary/20 px-3.5 py-3 flex items-start gap-3">
+                  <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-primary">Your fueling rhythm applies</p>
+                    <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
+                      {anchor.type === "drink"
+                        ? `${count} × ${formatBottleSize(size)} of mix is counted first on this ${formatDuration(duration)} ride; solid food fills whatever carbs are left.` +
+                          (short > 0
+                            ? ` Your plan will list all ${count} fills — ${short} more than the bottles above, so pack powder to remix en route.`
+                            : short < 0
+                            ? ` The other ${-short} bottle${-short !== 1 ? "s" : ""} ride along as plain water.`
+                            : "")
+                        : `${count} solid item${count !== 1 ? "s" : ""} ${count !== 1 ? "are" : "is"} counted first on this ${formatDuration(duration)} ride; your bottles are then mixed to cover the remaining carbs.`}
+                    </p>
+                    <Link href="/settings" className="inline-block mt-1 text-xs font-semibold text-primary hover:underline">
+                      Change in Settings →
+                    </Link>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Bottle volume hint */}
             {(() => {

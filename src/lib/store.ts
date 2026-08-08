@@ -125,7 +125,29 @@ export const useStore = create<AppStore>()(
               : {}),
             ...(drinks ? { drinks: merge(s.drinks, drinks, modes.drinks) } : {}),
             ...(foods ? { foods: merge(s.foods, foods, modes.foods) } : {}),
-            ...(plans ? { plans: merge(s.plans, plans, modes.plans) } : {}),
+            // Backups predating forecast refresh have no calcWeather — pin it
+            // to the plan's own forecast so they don't import as "out of date"
+            ...(plans
+              ? {
+                  plans: merge(
+                    s.plans,
+                    plans.map((p) => {
+                      const prep = p.result?.bottlePrep;
+                      const bottles =
+                        prep && prep.length !== p.bottles.length
+                          ? prep.map((b) => ({ id: b.bottleId, mlCapacity: b.mlCapacity }))
+                          : p.bottles;
+                      return {
+                        ...p,
+                        calcWeather: p.calcWeather ?? p.weather,
+                        bottles,
+                        bottlesCarried: p.bottlesCarried ?? p.bottles.length,
+                      };
+                    }),
+                    modes.plans
+                  ),
+                }
+              : {}),
           };
         }),
 
@@ -135,7 +157,7 @@ export const useStore = create<AppStore>()(
     {
       name: "cycling-fuel-store",
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 4,
       migrate: (persisted, version) => {
         const state = persisted as Partial<AppStore>;
         if (version < 1 && state.profile) {
@@ -147,6 +169,29 @@ export const useStore = create<AppStore>()(
           // Backfill conservative defaults so existing data keeps working.
           state.foods?.forEach((f) => {
             if (!f.type) f.type = "bar";
+          });
+        }
+        if (version < 3) {
+          // v3 adds forecast refresh + plan locking. Existing plans were
+          // calculated from the forecast they already carry, so pin
+          // calcWeather to it — otherwise every old plan would open with a
+          // spurious "forecast changed" banner.
+          state.plans?.forEach((p) => {
+            p.calcWeather ??= p.weather;
+          });
+        }
+        if (version < 4) {
+          // v4: a bottle rhythm used to invent its extra fills inside the
+          // calculator, so a plan could show 6 bottles to prep while its own
+          // bottle list still held 2 — and editing it snapped back to 2.
+          // The prep list is the truthful one; adopt it, and remember how many
+          // bottles the rider actually carries.
+          state.plans?.forEach((p) => {
+            const prep = p.result?.bottlePrep;
+            if (prep && prep.length !== p.bottles.length) {
+              p.bottlesCarried ??= p.bottles.length;
+              p.bottles = prep.map((b) => ({ id: b.bottleId, mlCapacity: b.mlCapacity }));
+            }
           });
         }
         return state as AppStore;

@@ -99,6 +99,7 @@ export async function fetchWeather(
       tempC,
       description: weatherInfo.description,
       icon: weatherInfo.icon,
+      fetchedAt: new Date().toISOString(),
     };
   } catch {
     return null;

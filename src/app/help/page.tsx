@@ -125,6 +125,10 @@ export default function HelpPage() {
           <p>These are conservative baselines for recreational cyclists. Actual sweat rate varies by body size, effort and humidity. In hot conditions CycleFuel flags a warning to remind you to top up your bottles fully.</p>
           <p className="mt-2">The <strong>target fluid</strong> shown in the summary is the recommended total for the ride. <strong>Total water</strong> is what you&apos;re actually bringing in bottles — if it falls short you&apos;ll see the gap highlighted, and on rides longer than your bottles hold the schedule paces you to the full target and marks <strong>refill</strong> points.</p>
         </Accordion>
+        <Accordion title="I plan rides weeks ahead — is the forecast still right?">
+          <p className="mb-2">No — a forecast two weeks out will move, sometimes by ten degrees. Open any plan and tap <strong>Refresh</strong> on the forecast row to pull the latest one; the plan re-does its fluid and sodium numbers around it.</p>
+          <p>If you&apos;d rather keep a plan exactly as you built it, tap the <strong>lock</strong> icon in the header. A locked plan never changes on its own: refreshing still fetches the new forecast and tells you what it <em>would</em> mean — 600 ml more water, say — but leaves your schedule untouched until you tap <strong>Update my plan</strong> or unlock it.</p>
+        </Accordion>
         <Accordion title="How do I measure my sweat rate?">
           <p className="mb-2">Weigh yourself (kg) right before and right after a ride on the same scale, wearing about the same, and note how much you drank. Then:</p>
           <p className="font-mono bg-muted rounded px-2 py-1 text-xs mb-2">sweat/hr = ((before − after) L + drunk L) ÷ hours</p>
@@ -143,6 +147,22 @@ export default function HelpPage() {
         </Accordion>
         <Accordion title="How much should I take?">
           <p>Most riders do well around <strong>300–700 mg of sodium per litre of fluid</strong> on rides over ~2 hours or in the heat. Very salty sweaters or ultra-distance riders may want more. It&apos;s individual — start in that range and adjust based on how you feel and whether you cramp.</p>
+        </Accordion>
+      </Section>
+
+      {/* Fueling rhythm */}
+      <Section emoji="⏱️" title="Fueling by rhythm" id="rhythm">
+        <Card>
+          <p className="text-muted-foreground">By default a plan starts from your bottles — their carbs are counted, and solid food fills whatever the target still needs. If you&apos;d rather fuel to a fixed rhythm, set one in <span className="text-foreground font-medium">Settings → Your Fueling Rhythm</span> and it decides the plan first.</p>
+        </Card>
+        <Accordion title="How does it change the plan?">
+          <p className="mb-2"><strong>Bottles per hour.</strong> Say 1 bottle/hr on a 4-hour ride: the plan mixes 4 bottles, counts their carbs, and fills the remainder with food. If you only carry two bottles it says so — you&apos;ll need powder to remix on the road, because a plain water refill carries no carbs.</p>
+          <p className="mb-2"><strong>Solid items per hour.</strong> Say 1 bar/hr on the same ride: 4 items go in first, evenly spaced through the feed window, and your bottles are then mixed strong enough to cover the carbs that are left — up to 1.5× normal strength, beyond which the plan flags the shortfall instead of asking you to drink syrup.</p>
+          <p>Leave it off and nothing changes. The rhythm is also snapshotted onto each plan when you create it, so changing the setting never reshapes rides you&apos;ve already planned.</p>
+        </Accordion>
+        <Accordion title="Is a fixed rhythm a good idea?">
+          <p className="mb-2">It&apos;s a practical one. Carb targets are per hour anyway, and &quot;a bottle every hour&quot; or &quot;a bar every hour&quot; is far easier to hold on the bike than a table of times. Many riders fuel exactly this way.</p>
+          <p>Two things to watch: a food rhythm faster than ~1 item per 45 min crowds bars and real food (gels and chews clear quicker — the plan warns you), and a bottle rhythm that outpaces the weather baseline means you&apos;re drinking on schedule rather than to need. Both are fine if that&apos;s what you want; the plan just makes them visible.</p>
         </Accordion>
       </Section>
 

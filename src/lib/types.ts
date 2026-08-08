@@ -73,6 +73,20 @@ export interface SweatTest {
   sweatRateMlPerHour: number;
 }
 
+// An optional "fueling rhythm": the rider fixes how many of one thing they take
+// per hour — a bottle of mix, or a bar/gel — and the plan starts from that
+// count. Whatever carbs it doesn't cover are filled by the other source.
+// Leave it off and the plan is built the usual way (bottles as configured,
+// solid food filling the gap).
+export type FuelAnchorType = "drink" | "food";
+
+export interface FuelAnchor {
+  type: FuelAnchorType;
+  perHour: number; // items per hour, e.g. 0.5, 1, 1.5, 2
+}
+
+export const FUEL_ANCHOR_RATE_OPTIONS: readonly number[] = [0.5, 0.75, 1, 1.5, 2];
+
 export interface UserProfile {
   weightKg?: number;
   defaultCarbsPerHour: CarbRate;
@@ -81,6 +95,8 @@ export interface UserProfile {
   // Personal sweat rate (ml/hr). When set, overrides the weather baseline.
   sweatRateMlPerHour?: number;
   sweatTests?: SweatTest[];
+  // Default fueling rhythm for new plans. Undefined = no rhythm.
+  fuelAnchor?: FuelAnchor;
 }
 
 export interface WeatherData {
@@ -88,6 +104,7 @@ export interface WeatherData {
   description: string;
   icon: "sun" | "cloud" | "rain" | "storm" | "snow" | "fog";
   manual?: boolean; // temperature entered by hand rather than fetched
+  fetchedAt?: string; // when this forecast was pulled (rides planned weeks out drift)
 }
 
 export interface SelectedDrink {
@@ -150,7 +167,9 @@ export interface CalculatedPlan {
   sodiumTargetMg?: number;
   sodiumDeliveredMg?: number;
   fluidPerHourMl: number;
-  fluidSource: "sweat-test" | "weather";
+  fluidSource: "sweat-test" | "weather" | "rhythm";
+  // Set when a fueling rhythm drove the plan — explains what it fixed first.
+  rhythmNote?: string;
   warnings: string[];
 }
 
@@ -164,9 +183,24 @@ export interface FuelPlan {
   lat?: number;
   lng?: number;
   weather?: WeatherData;
+  // The forecast `result` was actually calculated from. It only drifts away
+  // from `weather` when a refresh lands on a locked plan — that gap is what
+  // powers the "here's what would change" banner without touching the plan.
+  calcWeather?: WeatherData;
+  // Locked plans never change on their own: a weather refresh updates the
+  // forecast and shows the impact, but leaves the schedule exactly as it is.
+  locked?: boolean;
+  lockedAt?: string;
   carbsPerHour: CarbRate;
   intensity?: RideIntensity;
+  // Every bottle this plan mixes and drinks from, one-for-one with
+  // result.bottlePrep. A bottle rhythm can add fills beyond what the rider
+  // carries; bottlesCarried remembers how many they actually own.
   bottles: Bottle[];
+  bottlesCarried?: number;
+  // Snapshot of the rider's fueling rhythm at the time the plan was made, so
+  // changing the global setting never reshapes plans that already exist.
+  fuelAnchor?: FuelAnchor;
   includeSolidFood: boolean;
   includeCaffeine?: boolean;
   selectedDrinks: SelectedDrink[];
