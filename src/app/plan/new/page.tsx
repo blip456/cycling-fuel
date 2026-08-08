@@ -232,6 +232,7 @@ export default function NewPlanPage() {
       lat,
       lng,
       weather,
+      calcWeather: weather,
       carbsPerHour: data.carbsPerHour,
       intensity: data.intensity,
       bottles: data.bottles,

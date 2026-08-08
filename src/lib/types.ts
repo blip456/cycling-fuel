@@ -88,6 +88,7 @@ export interface WeatherData {
   description: string;
   icon: "sun" | "cloud" | "rain" | "storm" | "snow" | "fog";
   manual?: boolean; // temperature entered by hand rather than fetched
+  fetchedAt?: string; // when this forecast was pulled (rides planned weeks out drift)
 }
 
 export interface SelectedDrink {
@@ -164,6 +165,14 @@ export interface FuelPlan {
   lat?: number;
   lng?: number;
   weather?: WeatherData;
+  // The forecast `result` was actually calculated from. It only drifts away
+  // from `weather` when a refresh lands on a locked plan — that gap is what
+  // powers the "here's what would change" banner without touching the plan.
+  calcWeather?: WeatherData;
+  // Locked plans never change on their own: a weather refresh updates the
+  // forecast and shows the impact, but leaves the schedule exactly as it is.
+  locked?: boolean;
+  lockedAt?: string;
   carbsPerHour: CarbRate;
   intensity?: RideIntensity;
   bottles: Bottle[];

@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronRight, Sun, Cloud, CloudRain, CloudLightning, Snowflake, Wind, Trash2, Leaf } from "lucide-react";
+import { ArrowRight, ChevronRight, Sun, Cloud, CloudRain, CloudLightning, Snowflake, Wind, Trash2, Leaf, Lock } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration } from "@/lib/utils";
@@ -101,6 +101,15 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
                     <span className="flex items-center gap-1 text-sm text-muted-foreground">
                       <WeatherIcon icon={plan.weather.icon} className="h-3.5 w-3.5" />
                       {plan.weather.tempC}°C
+                    </span>
+                  )}
+                  {plan.locked && (
+                    <span
+                      className="flex items-center gap-1 rounded-full bg-sage-light text-primary text-[11px] font-semibold px-2 py-0.5"
+                      title="Locked — weather updates won't change this plan"
+                    >
+                      <Lock className="h-3 w-3" strokeWidth={2} />
+                      Locked
                     </span>
                   )}
                 </div>

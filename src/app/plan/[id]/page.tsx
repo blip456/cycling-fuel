@@ -6,12 +6,15 @@ import {
   ArrowLeft, ExternalLink, Sun, Cloud, CloudRain, CloudLightning,
   Snowflake, Wind, Droplets, Flame, AlertTriangle, Bike, Coffee,
   Pencil, X, Plus, Check, Trash2, Minus, Info, Download, RefreshCw,
+  Lock, LockOpen, Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, formatDistanceToNow, differenceInCalendarDays } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration, formatTime, generateId, formatBottleSize } from "@/lib/utils";
 import { calculateFuelPlan } from "@/lib/fuel-calculator";
+import { fetchWeather, geocodeLocation } from "@/lib/weather";
+import { weatherImpact, recalcPlanForWeather, describeImpact } from "@/lib/weather-impact";
 import { generateInsights, type PlanInsight } from "@/lib/plan-insights";
 import { generateGarminTCX } from "@/lib/export-garmin";
 import { CARB_RATE_OPTIONS, BOTTLE_SIZE_OPTIONS } from "@/lib/types";
@@ -252,6 +255,8 @@ export default function PlanResultPage() {
   const [recalcMsg, setRecalcMsg] = useState<string | null>(null);
   const [editCarbsPerHour, setEditCarbsPerHour] = useState<CarbRate>(60);
   const [editPlanBottles, setEditPlanBottles] = useState<Bottle[]>([]);
+  const [wxBusy, setWxBusy] = useState(false);
+  const [wxMsg, setWxMsg] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     const found = getPlan(params.id as string);
@@ -338,6 +343,124 @@ export default function PlanResultPage() {
       ),
     [liveSchedule]
   );
+
+  // What the forecast on file would mean for this plan. Non-null only when the
+  // plan's forecast has moved on from the one its schedule was built with —
+  // which is exactly what a refresh on a locked plan produces.
+  const impact = useMemo(
+    () => (plan ? weatherImpact(plan, { drinks, foods, profile }) : null),
+    [plan, drinks, foods, profile]
+  );
+
+  function persist(updated: FuelPlan) {
+    savePlan(updated);
+    setPlan(updated);
+  }
+
+  // Rebuild the schedule for the plan's current forecast, keeping the rider's
+  // bottle setup. Weather only moves fluid, sodium and the food that fills the
+  // remaining carb gap.
+  function withForecastApplied(target: FuelPlan): FuelPlan {
+    return {
+      ...target,
+      result: recalcPlanForWeather(target, target.weather, { drinks, foods, profile }),
+      calcWeather: target.weather,
+    };
+  }
+
+  async function refreshWeather() {
+    if (!plan) return;
+    setWxBusy(true);
+    setWxMsg(null);
+    try {
+      let lat = plan.lat;
+      let lng = plan.lng;
+      // Older plans stored only the typed location — geocode it once and keep
+      // the coordinates so later refreshes are a single request.
+      if ((lat == null || lng == null) && plan.location.trim()) {
+        const geo = await geocodeLocation(plan.location);
+        if (geo) {
+          lat = geo.latitude;
+          lng = geo.longitude;
+        }
+      }
+      if (lat == null || lng == null) {
+        setWxMsg({
+          tone: "error",
+          text: "This plan has no location to look up. Create a plan with a starting location to get forecasts.",
+        });
+        return;
+      }
+
+      const wx = await fetchWeather(lat, lng, plan.rideDate);
+      if (!wx) {
+        setWxMsg({
+          tone: "error",
+          text: "Couldn't get a forecast for this date. Forecasts only reach about 16 days ahead — try again closer to the ride, or check your connection.",
+        });
+        return;
+      }
+
+      const refreshed: FuelPlan = { ...plan, lat, lng, weather: wx };
+      if (plan.locked) {
+        // Locked: take the new forecast, leave the plan alone, show the delta.
+        persist(refreshed);
+        const next = weatherImpact(refreshed, { drinks, foods, profile });
+        setWxMsg(
+          next && !next.noChange
+            ? { tone: "info", text: `Forecast updated to ${wx.tempC}°C. Your plan is locked, so nothing changed — see what it would mean below.` }
+            : { tone: "success", text: `Forecast updated to ${wx.tempC}°C — your locked plan still fits it.` }
+        );
+      } else {
+        const beforeFluid = plan.result?.totalFluidMl ?? 0;
+        const updated = withForecastApplied(refreshed);
+        persist(updated);
+        const diff = (updated.result?.totalFluidMl ?? 0) - beforeFluid;
+        setWxMsg({
+          tone: "success",
+          text:
+            diff === 0
+              ? `Forecast updated to ${wx.tempC}°C — no change to your fuelling.`
+              : `Forecast updated to ${wx.tempC}°C — now ${((updated.result?.totalFluidMl ?? 0) / 1000).toFixed(1)}L of fluid (${diff > 0 ? "+" : "−"}${Math.abs(diff)}ml).`,
+        });
+      }
+    } catch {
+      setWxMsg({ tone: "error", text: "Couldn't reach the forecast service. Check your connection and try again." });
+    } finally {
+      setWxBusy(false);
+    }
+  }
+
+  function toggleLock() {
+    if (!plan) return;
+    if (!plan.locked) {
+      persist({ ...plan, locked: true, lockedAt: new Date().toISOString() });
+      setWxMsg({ tone: "info", text: "Plan locked. Weather refreshes will show what changes, but won't touch your plan." });
+      return;
+    }
+    // Unlocking hands control back to the app, so fold in any forecast change
+    // that landed while the plan was frozen.
+    const unlocked: FuelPlan = { ...plan, locked: false, lockedAt: undefined };
+    if (impact && !impact.noChange) {
+      persist(withForecastApplied(unlocked));
+      setWxMsg({ tone: "success", text: `Unlocked and updated to the ${plan.weather?.tempC}°C forecast: ${describeImpact(impact)}.` });
+    } else {
+      persist(unlocked);
+      setWxMsg({ tone: "info", text: "Plan unlocked — it will follow the latest forecast again." });
+    }
+  }
+
+  function applyForecastToPlan() {
+    if (!plan || !impact) return;
+    persist(withForecastApplied(plan));
+    setWxMsg({ tone: "success", text: `Plan updated to the ${plan.weather?.tempC}°C forecast.` });
+  }
+
+  function keepPlanAsIs() {
+    if (!plan) return;
+    persist({ ...plan, calcWeather: plan.weather });
+    setWxMsg({ tone: "info", text: "Kept your plan exactly as it is." });
+  }
 
   function enterEditMode() {
     if (!plan?.result) return;
@@ -479,7 +602,15 @@ export default function PlanResultPage() {
         intensity: plan.intensity,
         sweatRateMlPerHour: profile.sweatRateMlPerHour,
       });
-      updatedPlan = { ...plan, carbsPerHour: editCarbsPerHour, bottles: editPlanBottles, result: newResult };
+      // A full recalculation runs against the forecast on file, so the plan is
+      // back in sync with it — even if it was locked and lagging behind.
+      updatedPlan = {
+        ...plan,
+        carbsPerHour: editCarbsPerHour,
+        bottles: editPlanBottles,
+        result: newResult,
+        calcWeather: plan.weather,
+      };
     } else {
       updatedPlan = {
         ...plan,
@@ -542,6 +673,17 @@ export default function PlanResultPage() {
   const carbSplitTotal = drinkCarbs + foodCarbs;
   const drinkPct = carbSplitTotal > 0 ? Math.round((drinkCarbs / carbSplitTotal) * 100) : 0;
   const foodPct = carbSplitTotal > 0 ? 100 - drinkPct : 0;
+  // --- Forecast freshness ---
+  const daysToRide = differenceInCalendarDays(parseISO(plan.rideDate), new Date());
+  const forecastAgeLabel = plan.weather?.manual
+    ? "Temperature entered by hand"
+    : plan.weather?.fetchedAt
+    ? `Updated ${formatDistanceToNow(parseISO(plan.weather.fetchedAt), { addSuffix: true })}` +
+      (daysToRide > 7 ? " · a forecast this far out will still move" : "")
+    : plan.lat != null || plan.location.trim()
+    ? "Not refreshed since you made this plan"
+    : "No location on this plan — forecasts need one";
+
   const structuralChanges = editMode && (
     editCarbsPerHour !== plan.carbsPerHour ||
     editPlanBottles.length !== plan.bottles.length ||
@@ -581,7 +723,23 @@ export default function PlanResultPage() {
                 Back
               </button>
               <h1 className="font-display font-semibold text-foreground text-base">Your Fuel Plan</h1>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={toggleLock}
+                  aria-pressed={!!plan.locked}
+                  className={`p-2 rounded-xl transition-colors ${
+                    plan.locked
+                      ? "bg-sage-light text-primary hover:bg-sage-light/70"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                  title={
+                    plan.locked
+                      ? "Locked — weather refreshes won't change this plan. Tap to unlock."
+                      : "Lock this plan so weather updates can't change it"
+                  }
+                >
+                  {plan.locked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                </button>
                 <button
                   onClick={enterEditMode}
                   className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground"
@@ -675,6 +833,129 @@ export default function PlanResultPage() {
             </div>
           </div>
         </div>
+
+        {/* Forecast — refreshable, because rides get planned weeks ahead */}
+        {!editMode && (
+          <section className="flex flex-col gap-2">
+            <div className="bg-card border border-border rounded-2xl px-4 py-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-sage-light flex items-center justify-center shrink-0 text-primary">
+                {plan.weather ? (
+                  <WeatherIcon icon={plan.weather.icon} className="h-4 w-4" />
+                ) : (
+                  <Cloud className="h-4 w-4" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground truncate">
+                  {plan.weather
+                    ? `${plan.weather.tempC}°C · ${plan.weather.description}`
+                    : "No forecast yet"}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">{forecastAgeLabel}</p>
+              </div>
+              <button
+                onClick={refreshWeather}
+                disabled={wxBusy}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-muted text-sm font-medium text-foreground hover:bg-muted/70 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {wxBusy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {wxBusy ? "Checking…" : "Refresh"}
+              </button>
+            </div>
+
+            {wxMsg && (
+              <p
+                aria-live="polite"
+                className={`text-xs px-1 ${
+                  wxMsg.tone === "error"
+                    ? "text-destructive"
+                    : wxMsg.tone === "success"
+                    ? "text-primary font-medium"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {wxMsg.text}
+              </p>
+            )}
+
+            {plan.locked && (
+              <div className="flex gap-3 rounded-2xl border border-primary/20 bg-sage-light px-4 py-3">
+                <Lock className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-primary">Plan locked</p>
+                  <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
+                    A weather refresh will show you what changes, but won&apos;t touch this plan. You can still
+                    edit it yourself — or unlock it with the lock button up top.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Forecast moved on from what the plan was built with */}
+            {impact && (
+              impact.noChange ? (
+                <div className="flex gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+                  <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground">
+                      Forecast now {impact.to?.tempC}°C
+                      {impact.from ? ` (was ${impact.from.tempC}°C)` : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{describeImpact(impact)}</p>
+                    <button
+                      onClick={keepPlanAsIs}
+                      className="mt-2 text-xs font-semibold text-primary hover:underline"
+                    >
+                      Got it
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-900">
+                      {impact.from
+                        ? `Forecast changed: ${impact.from.tempC}°C → ${impact.to?.tempC}°C`
+                        : `New forecast: ${impact.to?.tempC}°C`}
+                    </p>
+                    <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                      Your plan is unchanged. Against this forecast it would need {describeImpact(impact)}.
+                    </p>
+                    {impact.newWarnings.length > 0 && (
+                      <ul className="mt-1.5 flex flex-col gap-1">
+                        {impact.newWarnings.map((w, i) => (
+                          <li key={i} className="text-xs text-amber-800 leading-relaxed">
+                            • {w}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="flex flex-wrap gap-2 mt-2.5">
+                      <button
+                        onClick={applyForecastToPlan}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Update my plan
+                      </button>
+                      <button
+                        onClick={keepPlanAsIs}
+                        className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 text-xs font-semibold hover:bg-amber-200 transition-colors"
+                      >
+                        Keep as is
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
+          </section>
+        )}
 
         {/* Breakdown — bottles, food items, and the drink/food carb split */}
         <section>

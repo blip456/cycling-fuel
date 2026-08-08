@@ -125,6 +125,10 @@ export default function HelpPage() {
           <p>These are conservative baselines for recreational cyclists. Actual sweat rate varies by body size, effort and humidity. In hot conditions CycleFuel flags a warning to remind you to top up your bottles fully.</p>
           <p className="mt-2">The <strong>target fluid</strong> shown in the summary is the recommended total for the ride. <strong>Total water</strong> is what you&apos;re actually bringing in bottles — if it falls short you&apos;ll see the gap highlighted, and on rides longer than your bottles hold the schedule paces you to the full target and marks <strong>refill</strong> points.</p>
         </Accordion>
+        <Accordion title="I plan rides weeks ahead — is the forecast still right?">
+          <p className="mb-2">No — a forecast two weeks out will move, sometimes by ten degrees. Open any plan and tap <strong>Refresh</strong> on the forecast row to pull the latest one; the plan re-does its fluid and sodium numbers around it.</p>
+          <p>If you&apos;d rather keep a plan exactly as you built it, tap the <strong>lock</strong> icon in the header. A locked plan never changes on its own: refreshing still fetches the new forecast and tells you what it <em>would</em> mean — 600 ml more water, say — but leaves your schedule untouched until you tap <strong>Update my plan</strong> or unlock it.</p>
+        </Accordion>
         <Accordion title="How do I measure my sweat rate?">
           <p className="mb-2">Weigh yourself (kg) right before and right after a ride on the same scale, wearing about the same, and note how much you drank. Then:</p>
           <p className="font-mono bg-muted rounded px-2 py-1 text-xs mb-2">sweat/hr = ((before − after) L + drunk L) ÷ hours</p>

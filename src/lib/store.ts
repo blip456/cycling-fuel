@@ -125,7 +125,17 @@ export const useStore = create<AppStore>()(
               : {}),
             ...(drinks ? { drinks: merge(s.drinks, drinks, modes.drinks) } : {}),
             ...(foods ? { foods: merge(s.foods, foods, modes.foods) } : {}),
-            ...(plans ? { plans: merge(s.plans, plans, modes.plans) } : {}),
+            // Backups predating forecast refresh have no calcWeather — pin it
+            // to the plan's own forecast so they don't import as "out of date"
+            ...(plans
+              ? {
+                  plans: merge(
+                    s.plans,
+                    plans.map((p) => ({ ...p, calcWeather: p.calcWeather ?? p.weather })),
+                    modes.plans
+                  ),
+                }
+              : {}),
           };
         }),
 
@@ -135,7 +145,7 @@ export const useStore = create<AppStore>()(
     {
       name: "cycling-fuel-store",
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const state = persisted as Partial<AppStore>;
         if (version < 1 && state.profile) {
@@ -147,6 +157,15 @@ export const useStore = create<AppStore>()(
           // Backfill conservative defaults so existing data keeps working.
           state.foods?.forEach((f) => {
             if (!f.type) f.type = "bar";
+          });
+        }
+        if (version < 3) {
+          // v3 adds forecast refresh + plan locking. Existing plans were
+          // calculated from the forecast they already carry, so pin
+          // calcWeather to it — otherwise every old plan would open with a
+          // spurious "forecast changed" banner.
+          state.plans?.forEach((p) => {
+            p.calcWeather ??= p.weather;
           });
         }
         return state as AppStore;
