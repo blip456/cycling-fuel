@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useStore } from "@/lib/store";
-import { calculateFuelPlan } from "@/lib/fuel-calculator";
+import { calculateFuelPlan, bottlesForRhythm, rhythmItemCount } from "@/lib/fuel-calculator";
 import { geocodeLocation, fetchWeather, manualWeather } from "@/lib/weather";
 import { LocationAutocomplete, type VerifiedLocation } from "@/components/location-autocomplete";
 import { formatDuration, generateId, formatBottleSize } from "@/lib/utils";
@@ -205,11 +205,15 @@ export default function NewPlanPage() {
     }
 
     const planId = generateId();
+    // A bottle rhythm needs more fills than the rider configured — materialise
+    // them now so the plan's bottle list and its bottle prep never disagree.
+    const planBottles = bottlesForRhythm(data.bottles, duration, profile.fuelAnchor, generateId);
     const result = calculateFuelPlan({
       distance: distanceNum,
       avgSpeed: speedNum,
       carbsPerHour: data.carbsPerHour,
-      bottles: data.bottles,
+      bottles: planBottles,
+      bottlesCarried: data.bottles.length,
       includeSolidFood: data.includeSolidFood,
       includeCaffeine: data.includeCaffeine,
       selectedDrinks: data.selectedDrinks,
@@ -236,7 +240,8 @@ export default function NewPlanPage() {
       calcWeather: weather,
       carbsPerHour: data.carbsPerHour,
       intensity: data.intensity,
-      bottles: data.bottles,
+      bottles: planBottles,
+      bottlesCarried: data.bottles.length,
       fuelAnchor: profile.fuelAnchor,
       includeSolidFood: data.includeSolidFood,
       includeCaffeine: data.includeCaffeine,
@@ -563,7 +568,7 @@ export default function NewPlanPage() {
             {(() => {
               const anchor = profile.fuelAnchor;
               if (!anchor || anchor.perHour <= 0 || duration <= 0) return null;
-              const count = Math.max(1, Math.min(24, Math.round(duration * anchor.perHour)));
+              const count = rhythmItemCount(duration, anchor);
               const size = data.bottles[0]?.mlCapacity ?? profile.defaultBottleMl;
               const short = anchor.type === "drink" ? count - data.bottles.length : 0;
               return (
@@ -575,7 +580,9 @@ export default function NewPlanPage() {
                       {anchor.type === "drink"
                         ? `${count} × ${formatBottleSize(size)} of mix is counted first on this ${formatDuration(duration)} ride; solid food fills whatever carbs are left.` +
                           (short > 0
-                            ? ` That's ${short} more than you're carrying, so pack powder to remix en route.`
+                            ? ` Your plan will list all ${count} fills — ${short} more than the bottles above, so pack powder to remix en route.`
+                            : short < 0
+                            ? ` The other ${-short} bottle${-short !== 1 ? "s" : ""} ride along as plain water.`
                             : "")
                         : `${count} solid item${count !== 1 ? "s" : ""} ${count !== 1 ? "are" : "is"} counted first on this ${formatDuration(duration)} ride; your bottles are then mixed to cover the remaining carbs.`}
                     </p>

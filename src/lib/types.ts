@@ -193,7 +193,11 @@ export interface FuelPlan {
   lockedAt?: string;
   carbsPerHour: CarbRate;
   intensity?: RideIntensity;
+  // Every bottle this plan mixes and drinks from, one-for-one with
+  // result.bottlePrep. A bottle rhythm can add fills beyond what the rider
+  // carries; bottlesCarried remembers how many they actually own.
   bottles: Bottle[];
+  bottlesCarried?: number;
   // Snapshot of the rider's fueling rhythm at the time the plan was made, so
   // changing the global setting never reshapes plans that already exist.
   fuelAnchor?: FuelAnchor;

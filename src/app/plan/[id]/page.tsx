@@ -12,7 +12,7 @@ import Link from "next/link";
 import { format, parseISO, formatDistanceToNow, differenceInCalendarDays } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration, formatTime, generateId, formatBottleSize } from "@/lib/utils";
-import { calculateFuelPlan } from "@/lib/fuel-calculator";
+import { calculateFuelPlan, rhythmItemCount } from "@/lib/fuel-calculator";
 import { fetchWeather, geocodeLocation } from "@/lib/weather";
 import { weatherImpact, recalcPlanForWeather, describeImpact } from "@/lib/weather-impact";
 import { generateInsights, type PlanInsight } from "@/lib/plan-insights";
@@ -540,6 +540,7 @@ export default function PlanResultPage() {
       intensity: plan.intensity,
       sweatRateMlPerHour: profile.sweatRateMlPerHour,
       fuelAnchor: plan.fuelAnchor,
+      bottlesCarried: plan.bottlesCarried,
       bottleSetup,
     });
     setEditBottles(
@@ -603,6 +604,7 @@ export default function PlanResultPage() {
         intensity: plan.intensity,
         sweatRateMlPerHour: profile.sweatRateMlPerHour,
         fuelAnchor: plan.fuelAnchor,
+        bottlesCarried: plan.bottlesCarried,
       });
       // A full recalculation runs against the forecast on file, so the plan is
       // back in sync with it — even if it was locked and lagging behind.
@@ -1124,8 +1126,15 @@ export default function PlanResultPage() {
 
               {/* Bottle sizes */}
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
                   Bottles
+                </p>
+                <p className="text-xs text-muted-foreground mb-2.5 leading-relaxed">
+                  One row per bottle this plan mixes — the same bottles as &ldquo;Prep Your Bottles&rdquo; below.
+                  {plan.fuelAnchor?.type === "drink" &&
+                    ` Your ${plan.fuelAnchor.perHour}/hr rhythm asked for ${rhythmItemCount(result.durationHours, plan.fuelAnchor)} of them.`}
+                  {plan.bottlesCarried != null && editPlanBottles.length > plan.bottlesCarried &&
+                    ` You carry ${plan.bottlesCarried}, so the rest are remixes en route.`}
                 </p>
                 <div className="flex flex-col gap-2">
                   {editPlanBottles.map((bottle, i) => (

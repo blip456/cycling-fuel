@@ -42,8 +42,11 @@ interface CalcInputs {
   // per bottle) instead of cycling selectedDrinks across `bottles`.
   bottleSetup?: BottleSetup[];
   // Optional per-hour rhythm ("a bottle an hour", "a bar an hour") that decides
-  // one side of the plan before anything else. See resolveAnchor below.
+  // one side of the plan before anything else.
   fuelAnchor?: FuelAnchor;
+  // How many bottles the rider actually carries. A bottle rhythm can plan more
+  // fills than that (remix en route), and this is what makes that visible.
+  bottlesCarried?: number;
 }
 
 // Hard ceiling on anchored items so a silly perHour can't generate a hundred
@@ -113,6 +116,32 @@ function fmtRate(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)));
 }
 
+// How many items a rhythm asks for on a ride of this length.
+export function rhythmItemCount(durationHours: number, anchor?: FuelAnchor): number {
+  if (!anchor || anchor.perHour <= 0 || durationHours <= 0) return 0;
+  return Math.max(1, Math.min(MAX_ANCHOR_ITEMS, Math.round(durationHours * anchor.perHour)));
+}
+
+// A bottle rhythm needs as many bottle fills as it asks for, which can be more
+// than the rider configured. Those extra fills are materialised into the plan's
+// own bottle list at creation time — so "Ride Setup" and "Prep Your Bottles"
+// always describe the same bottles, and editing one can't contradict the other.
+export function bottlesForRhythm(
+  bottles: Bottle[],
+  durationHours: number,
+  anchor: FuelAnchor | undefined,
+  newId: () => string
+): Bottle[] {
+  if (anchor?.type !== "drink") return bottles;
+  const needed = rhythmItemCount(durationHours, anchor);
+  if (needed <= bottles.length) return bottles;
+  const fillMl = bottles[0]?.mlCapacity ?? 500;
+  return [
+    ...bottles,
+    ...Array.from({ length: needed - bottles.length }, () => ({ id: newId(), mlCapacity: fillMl })),
+  ];
+}
+
 export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   const { distance, avgSpeed, carbsPerHour, bottles, includeSolidFood, weather, weightKg } = inputs;
 
@@ -141,17 +170,13 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   // fills whatever carbs are left. Without it, everything below behaves as it
   // always has — bottles as configured, food filling the gap.
   const anchor = inputs.fuelAnchor && inputs.fuelAnchor.perHour > 0 ? inputs.fuelAnchor : undefined;
-  const anchorCount = anchor
-    ? Math.max(1, Math.min(MAX_ANCHOR_ITEMS, Math.round(durationHours * anchor.perHour)))
-    : 0;
-  // An explicit bottle setup (the plan editor) is the rider's own hand on the
-  // bottles, so it wins over a drink rhythm.
-  const drinkAnchor = anchor?.type === "drink" && !inputs.bottleSetup && anchorCount > 0;
+  const anchorCount = rhythmItemCount(durationHours, anchor);
+  // The bottle list is the plan's own (see bottlesForRhythm — the fills a rhythm
+  // needs are materialised there, not invented here). A drink rhythm only
+  // decides how many of those bottles carry mix, and paces the drinking.
+  const drinkRhythm = anchor?.type === "drink" && anchorCount > 0;
   const foodAnchor =
     anchor?.type === "food" && includeSolidFood && activeFoods.length > 0 && anchorCount > 0;
-
-  // "One bottle" means the bottle this plan actually uses.
-  const anchorBottleMl = bottles[0]?.mlCapacity ?? 500;
 
   // Anchored food is placed first — its carbs decide how strong the mix needs
   // to be. Items that don't fit the feed window are reported, not silently cut.
@@ -172,9 +197,18 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     inputs.sweatRateMlPerHour,
     weather
   );
+  // The bottles this plan mixes and drinks from — the editor's explicit setup
+  // when it has one, otherwise the plan's own list.
+  const prepBottles: Bottle[] = inputs.bottleSetup
+    ? inputs.bottleSetup.map((b, i) => ({ id: b.bottleId ?? `b${i + 1}`, mlCapacity: b.mlCapacity }))
+    : bottles;
+  const plannedBottleMl = prepBottles.reduce((sum, b) => sum + b.mlCapacity, 0);
+
   // A bottle-per-hour rhythm is also a drinking rhythm: if it asks for more
   // fluid than the weather baseline, the rhythm sets the pace.
-  const anchoredFluidMl = drinkAnchor ? anchorCount * anchorBottleMl : 0;
+  const anchoredFluidMl = drinkRhythm
+    ? prepBottles.slice(0, anchorCount).reduce((sum, b) => sum + b.mlCapacity, 0)
+    : 0;
   const totalFluidMl = Math.max(Math.round(durationHours * baseFluidPerHourMl), anchoredFluidMl);
   const fluidPerHourMl =
     durationHours > 0 ? Math.round(totalFluidMl / durationHours) : baseFluidPerHourMl;
@@ -197,17 +231,6 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     sodiumMg: 0,
   });
 
-  // A drink rhythm replaces the bottle list with "N bottles of mix", which may
-  // be more than the rider carries — that's a refill-with-powder plan, and it's
-  // flagged in the warnings below.
-  const prepBottles: Bottle[] = drinkAnchor
-    ? Array.from({ length: anchorCount }, (_, i) => ({
-        id: `mix-${i + 1}`,
-        mlCapacity: anchorBottleMl,
-      }))
-    : bottles;
-
-  const plannedBottleMl = prepBottles.reduce((sum, b) => sum + b.mlCapacity, 0);
   // Bottles you don't finish don't deliver their carbs, so aim the mix at the
   // share of them this ride actually drinks.
   const plannedConsumedShare = plannedBottleMl > 0 ? Math.min(totalFluidMl / plannedBottleMl, 1) : 1;
@@ -240,6 +263,9 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     : prepBottles.map((bottle, i) => {
         const drinkEntry = activeDrinks.length > 0 ? activeDrinks[i % activeDrinks.length] : null;
         if (!drinkEntry) return waterBottle(bottle.id, i, bottle.mlCapacity);
+        // A bottle rhythm mixes exactly as many bottles as it asks for; any
+        // beyond that are along for the ride as plain water.
+        if (drinkRhythm && i >= anchorCount) return waterBottle(bottle.id, i, bottle.mlCapacity);
 
         const { product, sd } = drinkEntry;
         const scoops = sd.scoopsOverride ?? product.scoopsRecommended;
@@ -501,11 +527,13 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   // --- Fueling rhythm: what it fixed, and where it strains ---
   let rhythmNote: string | undefined;
   const foodCarbsPlanned = foodEvents.reduce((s, e) => s + e.food.carbsPerServing, 0);
-  if (drinkAnchor && anchor) {
+  if (drinkRhythm && anchor) {
     const gap = Math.max(0, totalCarbs - fullRideDrinkCarbs);
+    const mixed = bottlePrep.filter((b) => b.carbsTotal > 0);
+    const mixedMl = mixed.reduce((s, b) => s + b.mlCapacity, 0);
     rhythmNote =
       `Your rhythm — ${fmtRate(anchor.perHour)} bottle${anchor.perHour === 1 ? "" : "s"}/hr — sets this plan first: ` +
-      `${anchorCount} × ${anchorBottleMl}ml of mix for ${fullRideDrinkCarbs}g of carbs. ` +
+      `${mixed.length} × ${mixed[0]?.mlCapacity ?? 0}ml of mix (${(mixedMl / 1000).toFixed(1)}L) for ${fullRideDrinkCarbs}g of carbs. ` +
       (gap > 5
         ? `Solid food fills the remaining ${gap}g.`
         : `That already covers your ${totalCarbs}g target, so no food is scheduled.`);
@@ -519,11 +547,12 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
           `A smaller bottle or a lower rate keeps the carbs without the extra fluid.`
       );
     }
-    if (anchorCount > bottles.length) {
-      const refills = anchorCount - bottles.length;
+    const carried = inputs.bottlesCarried ?? 0;
+    if (carried > 0 && bottlePrep.length > carried) {
+      const refills = bottlePrep.length - carried;
       warnings.push(
-        `Your rhythm asks for ${anchorCount} × ${anchorBottleMl}ml of mix but you're carrying ${bottles.length} bottle${bottles.length !== 1 ? "s" : ""}. ` +
-          `Carry powder for ${refills} remix${refills !== 1 ? "es" : ""} en route — a plain water refill delivers no carbs.`
+        `This plan mixes ${bottlePrep.length} bottles but you carry ${carried}. ` +
+          `Pack powder for ${refills} remix${refills !== 1 ? "es" : ""} en route — a plain water refill delivers no carbs.`
       );
     }
   } else if (foodAnchor && anchor) {
