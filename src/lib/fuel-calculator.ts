@@ -231,14 +231,12 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     sodiumMg: 0,
   });
 
-  // Bottles you don't finish don't deliver their carbs, so aim the mix at the
-  // share of them this ride actually drinks.
-  const plannedConsumedShare = plannedBottleMl > 0 ? Math.min(totalFluidMl / plannedBottleMl, 1) : 1;
+  // Every bottle you mix gets finished — that's the rule the whole plan is built
+  // on. Two 90g bottles are 180g of carbs, whether or not the ride "needs" that
+  // much fluid; the plan flags the surplus instead of quietly discounting it.
   // With food setting the rhythm, the bottles are mixed to cover exactly the
   // carbs the food leaves behind.
-  const drinkCarbTarget = foodAnchor
-    ? Math.max(0, Math.round((totalCarbs - anchoredFoodCarbs) / Math.max(plannedConsumedShare, 0.1)))
-    : 0;
+  const drinkCarbTarget = foodAnchor ? Math.max(0, totalCarbs - anchoredFoodCarbs) : 0;
 
   const bottlePrep: BottlePrep[] = inputs.bottleSetup
     ? inputs.bottleSetup.map((b, i) => {
@@ -306,10 +304,13 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   const initialBottleMl = bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
   const initialDrinkCarbs = bottlePrep.reduce((sum, b) => sum + b.carbsTotal, 0);
   const initialDrinkSodium = bottlePrep.reduce((sum, b) => sum + (b.sodiumMg ?? 0), 0);
-  const bottleSets = initialBottleMl > 0 ? totalFluidMl / initialBottleMl : 1;
-  // If bottles hold more than the ride needs, only the consumed share counts
-  const consumedShare = Math.min(bottleSets, 1);
-  const fullRideDrinkCarbs = Math.round(initialDrinkCarbs * consumedShare);
+  // A bottle you carry is a bottle you finish, so every gram you mix into it
+  // lands: 2 × 90g bottles deliver 180g, full stop. No pro-rating against the
+  // ride's fluid need — if that leaves you over target, the plan says so.
+  const fullRideDrinkCarbs = initialDrinkCarbs;
+  // What the schedule paces you through: all of your bottles, plus water
+  // refills when the ride needs more fluid than they hold.
+  const plannedDrinkMl = Math.max(totalFluidMl, initialBottleMl);
 
   // --- Solid food: fills only the remaining carb gap ---
   const foodCarbsGap = Math.max(0, totalCarbs - fullRideDrinkCarbs);
@@ -341,13 +342,17 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
   let refillsNeeded = 0;
 
   if (firstDrinkMin === Infinity) {
-    // Very short ride: water only
+    // Very short ride: no structured feeding. Whatever you mixed still counts,
+    // though — you'll finish the bottle you brought.
     const midMin = Math.round(durationMin / 2);
     schedule.push({
       timeMin: midMin,
       km: Math.round((midMin / 60) * avgSpeed),
-      cumulativeCarbs: 0,
-      note: "Sip water as needed",
+      cumulativeCarbs: fullRideDrinkCarbs,
+      note:
+        fullRideDrinkCarbs > 0
+          ? `Sip as needed — finishing your bottle${bottlePrep.length !== 1 ? "s" : ""} is ${fullRideDrinkCarbs}g of carbs`
+          : "Sip water as needed",
     });
   } else {
     // Drink intervals every 20 min
@@ -376,14 +381,14 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       }
     });
 
-    // Sip-based fluid distribution (1 sip = 50ml). Crucially, pace to the
-    // ride's fluid NEED (totalFluidMl), NOT to bottle capacity. When the need
-    // exceeds what the bottles hold, the extra sips come from water refills and
-    // an explicit "refill" checkpoint is dropped into the schedule.
+    // Sip-based fluid distribution (1 sip = 50ml). Pace through everything you
+    // carry — a bottle is always finished — and top up beyond that when the
+    // ride's fluid need exceeds what the bottles hold. Those extra sips come
+    // from water refills, each marked with its own checkpoint below.
     const SIP_ML = 50;
     const capSipsPerBottle = bottlePrep.map((b) => Math.max(0, Math.round(b.mlCapacity / SIP_ML)));
     const totalCapSips = capSipsPerBottle.reduce((a, b) => a + b, 0); // one full set of bottles
-    const totalSips = Math.max(0, Math.round(totalFluidMl / SIP_ML));
+    const totalSips = Math.max(totalCapSips, Math.round(plannedDrinkMl / SIP_ML));
     refillsNeeded = totalCapSips > 0 ? Math.max(0, Math.ceil(totalSips / totalCapSips) - 1) : 0;
 
     // Carbs delivered by the first `n` sips. Only the first set of bottles
@@ -518,7 +523,8 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     }
   }
 
-  const drinkSodiumDelivered = Math.round(initialDrinkSodium * consumedShare);
+  // Same rule as the carbs: finished bottles deliver all their sodium too.
+  const drinkSodiumDelivered = initialDrinkSodium;
   const sodiumDeliveredMg = drinkSodiumDelivered + foodSodiumDelivered;
 
   // --- Warnings ---
@@ -581,10 +587,10 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
         );
       }
     }
-    const drinkShortfall = Math.round(drinkCarbTarget * plannedConsumedShare) - fullRideDrinkCarbs;
+    const drinkShortfall = drinkCarbTarget - fullRideDrinkCarbs;
     if (drinkShortfall > 10) {
       warnings.push(
-        `Your food rhythm leaves ${Math.round(drinkCarbTarget * plannedConsumedShare)}g for the bottles, but even at ${MAX_CONCENTRATION_FACTOR}× normal strength they only carry ${fullRideDrinkCarbs}g. ` +
+        `Your food rhythm leaves ${drinkCarbTarget}g for the bottles, but even at ${MAX_CONCENTRATION_FACTOR}× normal strength they only carry ${fullRideDrinkCarbs}g. ` +
           `Add a bottle, a stronger drink mix, or accept the ${drinkShortfall}g shortfall.`
       );
     }
@@ -625,10 +631,12 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
       `Low on sodium: this ride loses ~${sodiumTargetMg}mg via sweat but your plan replaces only ~${sodiumDeliveredMg}mg. Add an electrolyte mix or salty food — sodium helps you absorb both fluid and carbs, and wards off cramping on long/hot days.`
     );
   }
-  const leftoverMl = initialBottleMl - totalFluidMl;
-  if (leftoverMl >= 250 && durationHours >= 1) {
+  const surplusMl = initialBottleMl - totalFluidMl;
+  if (surplusMl >= 250 && durationHours >= 1) {
+    const surplusPerHour = durationHours > 0 ? Math.round(initialBottleMl / durationHours) : initialBottleMl;
     warnings.push(
-      `You're carrying ~${Math.round(leftoverMl / 50) * 50}ml more than this ride needs. The schedule paces you to ${fluidPerHourMl}ml/hr — the rest stays in your bottles as reserve.`
+      `You're carrying ~${Math.round(surplusMl / 50) * 50}ml more than this ride needs, and the plan assumes you finish every bottle — that's ${surplusPerHour}ml/hr instead of ${fluidPerHourMl}ml/hr. ` +
+        `Welcome in the heat, but on a cool day a smaller bottle keeps both the fluid and the carbs in line.`
     );
   }
   if (fullRideDrinkCarbs < totalCarbs * 0.5 && !includeSolidFood) {
@@ -664,11 +672,10 @@ export function calculateFuelPlan(inputs: CalcInputs): CalculatedPlan {
     }
   }
 
-  // What the schedule actually delivers: drink carbs consumed + food eaten.
-  const actualCarbs = schedule.reduce(
-    (sum, s) => sum + (s.drink?.carbs ?? 0) + (s.food?.carbs ?? 0),
-    0
-  );
+  // What the plan delivers: every bottle you mix gets finished, plus the food on
+  // the schedule. Deliberately read off the bottles rather than summed from the
+  // schedule rows, so a plan can never claim fewer carbs than it has you carry.
+  const actualCarbs = fullRideDrinkCarbs + foodCarbsPlanned;
 
   return {
     durationHours,

@@ -107,6 +107,15 @@ export default function HelpPage() {
           </ul>
           <p>CycleFuel warns you if your carb target doesn&apos;t match your drink&apos;s ratio — for example, targeting 90 g/hr with a glucose-only drink.</p>
         </Accordion>
+        <Accordion title="Why is my total higher than my target?">
+          <p className="mb-2">Because a bottle you carry is a bottle you finish. CycleFuel counts <strong>every gram you mix in full</strong> — two bottles at 90 g each are 180 g of carbs, whether or not the ride needs that much fluid. It never quietly discounts a bottle for being bigger than the ride.</p>
+          <p className="mb-2">So a strong or generous mix can land you well over target. When that happens the plan says so — <strong>&ldquo;too many carbs&rdquo;</strong>, with the gap in grams and your real g/hr — and offers two ways back:</p>
+          <ul className="list-disc list-inside space-y-1 mb-2">
+            <li><strong>Drink less mix</strong> — same bottles, same fluid, fewer scoops.</li>
+            <li><strong>Bring fewer millilitres</strong> — same strength mix, smaller bottles.</li>
+          </ul>
+          <p>Either one is applied for you and the schedule is rebuilt around it (with solid food re-added to fill any gap). Or tap <strong>Accept the extra</strong> — a buffer on a big day is a legitimate choice, and the plan then stops nagging about it.</p>
+        </Accordion>
       </Section>
 
       {/* Fluid */}
@@ -124,6 +133,7 @@ export default function HelpPage() {
         <Accordion title="Where do these numbers come from?">
           <p>These are conservative baselines for recreational cyclists. Actual sweat rate varies by body size, effort and humidity. In hot conditions CycleFuel flags a warning to remind you to top up your bottles fully.</p>
           <p className="mt-2">The <strong>target fluid</strong> shown in the summary is the recommended total for the ride. <strong>Total water</strong> is what you&apos;re actually bringing in bottles — if it falls short you&apos;ll see the gap highlighted, and on rides longer than your bottles hold the schedule paces you to the full target and marks <strong>refill</strong> points.</p>
+          <p className="mt-2">Carrying <em>more</em> than the target? The schedule still walks you through all of it, because the plan assumes you finish your bottles — and it flags both the extra fluid and the extra carbs that come with it.</p>
         </Accordion>
         <Accordion title="I plan rides weeks ahead — is the forecast still right?">
           <p className="mb-2">No — a forecast two weeks out will move, sometimes by ten degrees. Open any plan and tap <strong>Refresh</strong> on the forecast row to pull the latest one; the plan re-does its fluid and sodium numbers around it.</p>

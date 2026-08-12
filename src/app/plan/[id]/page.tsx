@@ -16,6 +16,10 @@ import { calculateFuelPlan, rhythmItemCount } from "@/lib/fuel-calculator";
 import { fetchWeather, geocodeLocation } from "@/lib/weather";
 import { weatherImpact, recalcPlanForWeather, describeImpact } from "@/lib/weather-impact";
 import { generateInsights, type PlanInsight } from "@/lib/plan-insights";
+import {
+  carbBalance, bottleCarbs, scheduleFoodCarbs, planCarbBalance, overshootAlternatives,
+  type OvershootAlternative,
+} from "@/lib/carb-balance";
 import { generateGarminTCX } from "@/lib/export-garmin";
 import { CARB_RATE_OPTIONS, BOTTLE_SIZE_OPTIONS } from "@/lib/types";
 import type {
@@ -257,6 +261,7 @@ export default function PlanResultPage() {
   const [editPlanBottles, setEditPlanBottles] = useState<Bottle[]>([]);
   const [wxBusy, setWxBusy] = useState(false);
   const [wxMsg, setWxMsg] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
+  const [carbMsg, setCarbMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const found = getPlan(params.id as string);
@@ -334,14 +339,12 @@ export default function PlanResultPage() {
     });
   }, [editItems, liveBottles]);
 
-  // What the schedule delivers: drink carbs consumed + food eaten
+  // What the plan delivers: every bottle finished in full + the food on the
+  // schedule. Never the sum of the sip rows — a bottle you carry is a bottle you
+  // empty, so its carbs count whether or not the ride needs that much fluid.
   const liveTotalCarbs = useMemo(
-    () =>
-      liveSchedule.reduce(
-        (sum, s) => sum + (s.drink?.carbs ?? 0) + (s.food?.carbs ?? 0),
-        0
-      ),
-    [liveSchedule]
+    () => bottleCarbs(liveBottles) + scheduleFoodCarbs(liveSchedule),
+    [liveBottles, liveSchedule]
   );
 
   // What the forecast on file would mean for this plan. Non-null only when the
@@ -460,6 +463,62 @@ export default function PlanResultPage() {
     if (!plan) return;
     persist({ ...plan, calcWeather: plan.weather });
     setWxMsg({ tone: "info", text: "Kept your plan exactly as it is." });
+  }
+
+  // --- Too many carbs: take an alternative, or accept the surplus -----------
+  // Applying an alternative is a full recalculation from its bottle setup, so
+  // solid food is re-added for whatever gap the weaker (or smaller) mix leaves.
+  function applyAlternative(alt: OvershootAlternative) {
+    if (!plan?.result) return;
+    const newResult = calculateFuelPlan({
+      distance: plan.distance,
+      avgSpeed: plan.avgSpeed,
+      carbsPerHour: plan.carbsPerHour,
+      bottles: alt.bottles,
+      includeSolidFood: plan.includeSolidFood,
+      includeCaffeine: plan.includeCaffeine,
+      selectedDrinks: plan.selectedDrinks,
+      selectedFoods: plan.selectedFoods,
+      drinks,
+      foods,
+      weather: plan.weather,
+      weightKg: profile.weightKg,
+      intensity: plan.intensity,
+      sweatRateMlPerHour: profile.sweatRateMlPerHour,
+      fuelAnchor: plan.fuelAnchor,
+      bottlesCarried: plan.bottlesCarried,
+      bottleSetup: alt.bottleSetup,
+    });
+    const updated: FuelPlan = {
+      ...plan,
+      bottles: alt.bottles,
+      result: newResult,
+      // A full recalculation runs against the forecast on file, so the plan is
+      // back in sync with it. The old acceptance was about the old numbers.
+      calcWeather: plan.weather,
+      carbOvershootAccepted: undefined,
+    };
+    persist(updated);
+    const after = planCarbBalance(updated, newResult);
+    setCarbMsg(
+      `${alt.label}: now ${after.plannedCarbs}g against your ${after.targetCarbs}g target` +
+        (after.overshoot
+          ? ` — still ${after.diffG}g over, so take the other option too if you want it exact.`
+          : "."
+        )
+    );
+  }
+
+  function acceptOvershoot() {
+    if (!plan) return;
+    setCarbMsg(null);
+    persist({ ...plan, carbOvershootAccepted: new Date().toISOString() });
+  }
+
+  function reconsiderOvershoot() {
+    if (!plan) return;
+    setCarbMsg(null);
+    persist({ ...plan, carbOvershootAccepted: undefined });
   }
 
   function enterEditMode() {
@@ -614,11 +673,17 @@ export default function PlanResultPage() {
         bottles: editPlanBottles,
         result: newResult,
         calcWeather: plan.weather,
+        // New target or new bottles means a new carb balance to judge.
+        carbOvershootAccepted: undefined,
       };
     } else {
+      // Edited scoops or drinks change what the bottles deliver, so an earlier
+      // "keep the extra" no longer applies. An untouched mix keeps it.
+      const mixChanged = bottleCarbs(liveBottles) !== bottleCarbs(plan.result.bottlePrep);
       updatedPlan = {
         ...plan,
         result: { ...plan.result, bottlePrep: liveBottles, schedule: liveSchedule, totalCarbs: liveTotalCarbs },
+        ...(mixChanged ? { carbOvershootAccepted: undefined } : {}),
       };
     }
     savePlan(updatedPlan);
@@ -654,11 +719,6 @@ export default function PlanResultPage() {
   const weatherMeta = plan.weather ? getWeatherLabel(plan.weather.tempC) : null;
   const displayBottles = editMode ? liveBottles : result.bottlePrep;
   const displaySchedule = editMode ? liveSchedule : result.schedule;
-  const viewTotalCarbs = result.schedule.reduce(
-    (sum, s) => sum + (s.drink?.carbs ?? 0) + (s.food?.carbs ?? 0),
-    0
-  );
-  const displayTotalCarbs = editMode ? liveTotalCarbs : viewTotalCarbs;
   const fluidPerHour = Math.round(result.totalFluidMl / result.durationHours);
   const targetFluidMl = result.totalFluidMl;
   const actualFluidMl = editMode
@@ -666,12 +726,24 @@ export default function PlanResultPage() {
     : result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
   const fluidDiffMl = actualFluidMl - targetFluidMl;
   const displayCarbsPerHour = editMode ? editCarbsPerHour : plan.carbsPerHour;
-  const targetCarbs = Math.round(result.durationHours * displayCarbsPerHour);
-  const carbsDiff = displayTotalCarbs - targetCarbs;
+
+  // --- Carb balance: bottles in full + food, against the ride's target -----
+  const balance = carbBalance({
+    durationHours: result.durationHours,
+    carbsPerHour: displayCarbsPerHour,
+    drinkCarbs: bottleCarbs(displayBottles),
+    foodCarbs: scheduleFoodCarbs(displaySchedule),
+  });
+  const displayTotalCarbs = balance.plannedCarbs;
+  const targetCarbs = balance.targetCarbs;
+  const carbsDiff = balance.diffG;
+  // Ways back to target when the bottles carry more than the ride asks for.
+  const overshootAlts =
+    !editMode && balance.overshoot ? overshootAlternatives(plan, result, drinks, balance) : [];
 
   // --- Breakdown stats (live in edit mode too) ---
-  const drinkCarbs = displaySchedule.reduce((sum, s) => sum + (s.drink?.carbs ?? 0), 0);
-  const foodCarbs = displaySchedule.reduce((sum, s) => sum + (s.food?.carbs ?? 0), 0);
+  const drinkCarbs = balance.drinkCarbs;
+  const foodCarbs = balance.foodCarbs;
   const bottleCount = displayBottles.length;
   const foodItemsCount = displaySchedule.filter((s) => s.food).length;
   const carbSplitTotal = drinkCarbs + foodCarbs;
@@ -810,7 +882,7 @@ export default function PlanResultPage() {
               </div>
               <p className="font-display text-xl font-semibold transition-all duration-300">{displayTotalCarbs}g</p>
               <p className={`text-[10px] mt-0.5 font-medium ${
-                carbsDiff < -20 ? "text-amber-300" : "text-primary-foreground/50"
+                carbsDiff < -20 || balance.overshoot ? "text-amber-300" : "text-primary-foreground/50"
               }`}>
                 {carbsDiff === 0
                   ? `target ${targetCarbs}g ✓`
@@ -837,6 +909,90 @@ export default function PlanResultPage() {
             </div>
           </div>
         </div>
+
+        {/* Too many carbs — every bottle counts in full, so say so plainly and
+            offer the two ways out before the rider mixes anything. */}
+        {!editMode && balance.overshoot && (
+          plan.carbOvershootAccepted ? (
+            <div className="flex gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+              <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">
+                  Extra carbs accepted — {displayTotalCarbs}g on a {targetCarbs}g ride
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                  You&apos;re taking {balance.plannedPerHour}g/hr against a {balance.targetPerHour}g/hr target.
+                  Your bottles count in full, because the plan assumes you finish every one of them.
+                </p>
+                <button
+                  onClick={reconsiderOvershoot}
+                  className="mt-1.5 text-xs font-semibold text-primary hover:underline"
+                >
+                  Show the alternatives again →
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-4">
+              <div className="flex gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-amber-900 leading-snug">
+                    Too many carbs: {carbsDiff}g more than this ride needs
+                  </p>
+                  <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                    Your {bottleCount} bottle{bottleCount !== 1 ? "s" : ""} hold {drinkCarbs}g of mix and this plan
+                    assumes you finish every one of them
+                    {foodCarbs > 0 ? `, plus ${foodCarbs}g of food` : ""} — {displayTotalCarbs}g in total.
+                    Over {formatDuration(result.durationHours)} that&apos;s {balance.plannedPerHour}g/hr against
+                    your {balance.targetPerHour}g/hr target.
+                  </p>
+                </div>
+              </div>
+
+              {overshootAlts.length > 0 ? (
+                <>
+                  <p className="text-xs font-semibold text-amber-900 mt-3 mb-2">
+                    Take one of these instead, or accept the extra:
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {overshootAlts.map((alt) => (
+                      <div key={alt.id} className="rounded-xl border border-amber-200 bg-white/70 px-3 py-3">
+                        <p className="text-sm font-semibold text-amber-900">{alt.label}</p>
+                        <p className="text-xs font-medium text-amber-800 mt-0.5">{alt.headline}</p>
+                        <p className="text-xs text-amber-700 mt-1 leading-relaxed">{alt.detail}</p>
+                        <button
+                          onClick={() => applyAlternative(alt)}
+                          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          Use this
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-amber-800 mt-3 leading-relaxed">
+                  Lower your carbs-per-hour target, or tap Edit to mix fewer scoops or fit a smaller bottle.
+                </p>
+              )}
+
+              <button
+                onClick={acceptOvershoot}
+                className="mt-2.5 w-full px-3 py-2 rounded-lg bg-amber-100 text-amber-900 text-xs font-semibold hover:bg-amber-200 transition-colors"
+              >
+                Accept the extra {carbsDiff}g
+              </button>
+            </div>
+          )
+        )}
+
+        {carbMsg && (
+          <p aria-live="polite" className="text-xs px-1 -mt-2 text-primary font-medium">
+            {carbMsg}
+          </p>
+        )}
 
         {/* Forecast — refreshable, because rides get planned weeks ahead */}
         {!editMode && (

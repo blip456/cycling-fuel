@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { toPng } from "html-to-image";
 import { useStore } from "@/lib/store";
 import { formatDuration, formatTime } from "@/lib/utils";
+import { planCarbBalance } from "@/lib/carb-balance";
 import type { FuelPlan } from "@/lib/types";
 
 export default function MinimalPlanPage() {
@@ -58,6 +59,9 @@ export default function MinimalPlanPage() {
   }
 
   const { result } = plan;
+  // Bottles count in full here too — a carried bottle is a finished bottle.
+  const balance = planCarbBalance(plan, result);
+  const carriedMl = result.bottlePrep.reduce((sum, b) => sum + b.mlCapacity, 0);
 
   return (
     <div className="bg-white min-h-screen">
@@ -122,7 +126,7 @@ export default function MinimalPlanPage() {
               <p className="text-xs text-gray-400">carbs/hr</p>
             </div>
             <div className="border border-gray-100 rounded p-2">
-              <p className="font-bold text-base">{result.totalCarbs}g</p>
+              <p className="font-bold text-base">{balance.plannedCarbs}g</p>
               <p className="text-xs text-gray-400">total carbs</p>
             </div>
             <div className="border border-gray-100 rounded p-2">
@@ -130,6 +134,19 @@ export default function MinimalPlanPage() {
               <p className="text-xs text-gray-400">fluid</p>
             </div>
           </div>
+          {carriedMl > result.totalFluidMl + 100 && (
+            <p className="text-xs text-gray-500 mt-2">
+              Fluid: {(carriedMl / 1000).toFixed(1)}L in bottles, all of it finished, vs{" "}
+              {(result.totalFluidMl / 1000).toFixed(1)}L this ride needs.
+            </p>
+          )}
+          {balance.overshoot && (
+            <p className="text-xs text-gray-700 mt-2 font-bold">
+              ⚠ {balance.diffG}g over target: {balance.plannedCarbs}g planned vs {balance.targetCarbs}g needed
+              ({balance.plannedPerHour}g/hr vs {balance.targetPerHour}g/hr). Every bottle counted as finished.
+              {plan.carbOvershootAccepted ? " Accepted by you." : " Mix weaker or bring smaller bottles."}
+            </p>
+          )}
           {(result.sodiumTargetMg ?? 0) > 0 && (
             <p className="text-xs text-gray-500 mt-2">
               Sodium: ~{result.sodiumDeliveredMg}mg planned / ~{result.sodiumTargetMg}mg lost in sweat
