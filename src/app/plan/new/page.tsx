@@ -16,6 +16,7 @@ import { geocodeLocation, fetchWeather, manualWeather } from "@/lib/weather";
 import { LocationAutocomplete, type VerifiedLocation } from "@/components/location-autocomplete";
 import { formatDuration, generateId, formatBottleSize } from "@/lib/utils";
 import { calcMaxFoodItems } from "@/lib/plan-insights";
+import { carbBalance, bottleCarbs, scheduleFoodCarbs } from "@/lib/carb-balance";
 import { personalizedCarbTarget, fluidFeedbackHint, gutTrainingHint } from "@/lib/personalization";
 import { CARB_RATE_OPTIONS, BOTTLE_SIZE_OPTIONS, FOOD_GAP_MIN, FOOD_TYPE_LABELS } from "@/lib/types";
 import type { Bottle, SelectedDrink, FuelPlan, CarbRate, RideIntensity } from "@/lib/types";
@@ -769,6 +770,57 @@ export default function NewPlanPage() {
                 </div>
               )}
             </div>
+
+            {/* Carb surplus preview — a bottle always gets finished, so a big or
+                strong mix can put you over target before you've even mixed it. */}
+            {(() => {
+              if (duration <= 0 || data.selectedDrinks.length === 0) return null;
+              const previewBottles = bottlesForRhythm(data.bottles, duration, profile.fuelAnchor, generateId);
+              const preview = calculateFuelPlan({
+                distance: distanceNum,
+                avgSpeed: speedNum,
+                carbsPerHour: data.carbsPerHour,
+                bottles: previewBottles,
+                bottlesCarried: data.bottles.length,
+                includeSolidFood: data.includeSolidFood,
+                includeCaffeine: data.includeCaffeine,
+                selectedDrinks: data.selectedDrinks,
+                selectedFoods: data.selectedFoods,
+                drinks,
+                foods,
+                weightKg: profile.weightKg,
+                intensity: data.intensity,
+                sweatRateMlPerHour: profile.sweatRateMlPerHour,
+                fuelAnchor: profile.fuelAnchor,
+              });
+              const balance = carbBalance({
+                durationHours: preview.durationHours,
+                carbsPerHour: data.carbsPerHour,
+                drinkCarbs: bottleCarbs(preview.bottlePrep),
+                foodCarbs: scheduleFoodCarbs(preview.schedule),
+              });
+              if (!balance.overshoot) return null;
+              const mixedMl = preview.bottlePrep
+                .filter((b) => b.carbsTotal > 0)
+                .reduce((s, b) => s + b.mlCapacity, 0);
+              return (
+                <div className="rounded-xl bg-amber-50 border-2 border-amber-300 px-3.5 py-3 flex items-start gap-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-amber-900">
+                      That&apos;s {balance.diffG}g more carbs than this ride needs
+                    </p>
+                    <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                      {(mixedMl / 1000).toFixed(1)}L of mix carries {balance.drinkCarbs}g, and a bottle you take is a
+                      bottle you finish — {balance.plannedCarbs}g in total against the {balance.targetCarbs}g this{" "}
+                      {formatDuration(duration)} ride asks for ({balance.plannedPerHour}g/hr vs{" "}
+                      {balance.targetPerHour}g/hr). Use fewer scoops above, go back and pick a smaller bottle, or raise
+                      your carb target. You can also generate the plan and accept the extra there.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Drink ratio warning */}
             {(() => {

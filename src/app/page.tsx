@@ -7,6 +7,7 @@ import { ArrowRight, ChevronRight, Sun, Cloud, CloudRain, CloudLightning, Snowfl
 import { format, parseISO } from "date-fns";
 import { useStore } from "@/lib/store";
 import { formatDuration } from "@/lib/utils";
+import { planCarbBalance } from "@/lib/carb-balance";
 import type { WeatherData, FuelPlan } from "@/lib/types";
 
 function WeatherIcon({ icon, className }: { icon: WeatherData["icon"]; className?: string }) {
@@ -129,11 +130,27 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
               </span>
             </div>
           </div>
-          {plan.result && (
+          {plan.result && (() => {
+            // Bottles count in full, so read the total off the same balance the
+            // plan page uses — and flag a surplus right here on the list.
+            const balance = planCarbBalance(plan, plan.result);
+            return (
             <div className="px-5 pb-4 flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center rounded-full bg-sage-light text-primary text-xs font-medium px-3 py-1">
-                {plan.result.totalCarbs}g carbs
+                {balance.plannedCarbs}g carbs
               </span>
+              {balance.overshoot && (
+                <span
+                  className={`inline-flex items-center rounded-full text-xs font-semibold px-3 py-1 ${
+                    plan.carbOvershootAccepted
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-amber-100 text-amber-800"
+                  }`}
+                  title={`${balance.plannedCarbs}g planned against a ${balance.targetCarbs}g target`}
+                >
+                  +{balance.diffG}g over target{plan.carbOvershootAccepted ? " · accepted" : ""}
+                </span>
+              )}
               <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground text-xs font-medium px-3 py-1">
                 {Math.round(plan.result.totalFluidMl / 100) / 10}L fluid
               </span>
@@ -149,7 +166,8 @@ function SwipeToDeleteCard({ plan, onDelete }: { plan: FuelPlan; onDelete: () =>
                 )
               )}
             </div>
-          )}
+            );
+          })()}
         </Link>
       </div>
     </div>

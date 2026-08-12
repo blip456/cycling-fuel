@@ -1,4 +1,5 @@
 import { formatDuration } from "./utils";
+import { bottleCarbs, scheduleFoodCarbs } from "./carb-balance";
 import { CARB_RATE_OPTIONS } from "./types";
 import type { FuelPlan, CalculatedPlan, CarbRate, RideIntensity } from "./types";
 
@@ -61,11 +62,10 @@ export function generateInsights(
   const durationH = result.durationHours;
   const intensity = plan.intensity ?? "steady";
 
-  // Carbs the schedule actually delivers (drinks consumed + food eaten)
-  const actualCarbs = result.schedule.reduce(
-    (s, i) => s + (i.drink?.carbs ?? 0) + (i.food?.carbs ?? 0),
-    0
-  );
+  // Carbs the plan delivers: every mixed bottle in full (you finish what you
+  // carry) plus the food on the schedule.
+  const bottleCarbsTotal = bottleCarbs(result.bottlePrep);
+  const actualCarbs = bottleCarbsTotal + scheduleFoodCarbs(result.schedule);
   const targetCarbs = Math.round(durationH * plan.carbsPerHour);
 
   // ── 1. Carb target below science recommendation ──────────────────────
@@ -95,10 +95,9 @@ export function generateInsights(
   }
 
   // ── 2. Significant carb shortfall (only when user has carb sources) ──
-  const bottleCarbs = result.bottlePrep.reduce((s, b) => s + b.carbsTotal, 0);
   const carbShortfall = targetCarbs - actualCarbs;
   if (durationH >= 1 &&
-      (bottleCarbs > 0 || plan.selectedFoods.length > 0) &&
+      (bottleCarbsTotal > 0 || plan.selectedFoods.length > 0) &&
       carbShortfall > Math.max(15, targetCarbs * 0.15)) {
     insights.push({
       id: "carb-shortfall",
@@ -110,18 +109,9 @@ export function generateInsights(
     });
   }
 
-  // ── 2b. Plan delivers well ABOVE target — usually a carb-heavy bottle mix ──
-  const carbOvershoot = actualCarbs - targetCarbs;
-  if (durationH >= 1 && carbOvershoot > Math.max(20, targetCarbs * 0.15)) {
-    insights.push({
-      id: "carb-overshoot",
-      level: "suggestion",
-      title: `Plan delivers ${carbOvershoot}g over your ${targetCarbs}g target`,
-      detail:
-        `Your bottles carry about ${Math.round(actualCarbs / durationH)}g/hr — more than your ${plan.carbsPerHour}g/hr goal, so drinks alone cover the target and no solid food is scheduled. ` +
-        `Tap Edit, lower the scoops, then Recalculate to hit ${targetCarbs}g and make room for food — or keep it as a buffer on a big day.`,
-    });
-  }
+  // A carb surplus is deliberately NOT an insight: the plan page has a dedicated
+  // "too many carbs" card for it, with the alternatives to drink less mix or
+  // carry fewer millilitres. See carb-balance.ts.
 
   // ── 3. No solid food on a long ride ─────────────────────────────────
   if (durationH >= 2.5 && !plan.includeSolidFood) {

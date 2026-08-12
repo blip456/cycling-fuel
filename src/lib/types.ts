@@ -207,4 +207,8 @@ export interface FuelPlan {
   selectedFoods: string[];
   result?: CalculatedPlan;
   feedback?: RideFeedback;
+  // Set when the rider has seen "this is more carbs than the ride needs" and
+  // chosen to keep it anyway (timestamp of that choice). Any recalculation that
+  // reshapes the bottles clears it, so the question is asked again on new numbers.
+  carbOvershootAccepted?: string;
 }
